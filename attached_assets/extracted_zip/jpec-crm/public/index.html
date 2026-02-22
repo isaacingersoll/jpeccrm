@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JPEC CRM — University of Iowa</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; }
+    ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+    .sidebar-link { transition: all 0.15s; }
+    .ring-gold { --tw-ring-color: #FFCD00; }
+    input:focus, select:focus, textarea:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,205,0,0.3); border-color: #FFCD00; }
+  </style>
+</head>
+<body class="bg-gray-50">
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, createContext, useContext } = React;
+
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const INDUSTRIES = ['AgTech','HealthTech','EdTech','CleanTech','FinTech','Marketplace','Technology','Legal','Marketing','Operations','SaaS','Manufacturing','Retail','Other'];
+const STAGES = ['Idea','Pre-Launch','Early Stage','Growth Stage','Mature'];
+const EVENT_TYPES = ['Workshop','Pitch Competition','Demo Day','Networking','Panel','Webinar','Other'];
+const AFFILIATIONS = ['Student','Mentor','Alumni','Faculty','Founder','Investor','Donor','Community','Other'];
+const UPDATE_TYPES = ['Investment','Milestone','Media','Customer','Award','Team','Partnership','Other'];
+const SKILLS = ['Marketing','Sales','Financial Planning','Fundraising','Product Development','Tech Strategy','Legal','Operations','IP Protection','Brand Strategy','Social Media','PR','Customer Acquisition','Business Development','Partnerships','Enterprise','Investor Relations','Cap Table','Supply Chain','Process Improvement','Team Building','Contracts','Compliance','Accounting','Financial Modeling','B2B Strategy','Product-Market Fit','Vendor Management','Content Strategy','Incorporation'];
+const NEEDS = SKILLS;
+const STAGE_PREFS = ['Any','Idea','Pre-Launch','Early Stage','Growth Stage','Mature'];
+
+// ─── UTILITIES ───────────────────────────────────────────────────────────────
+const api = {
+  get: url => fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+  post: (url, body) => fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).then(r => r.json()),
+  put: (url, body) => fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).then(r => r.json()),
+  del: url => fetch(url, { method:'DELETE' }).then(r => r.json()),
+};
+
+const fmt = {
+  date: d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '—',
+  money: n => !n ? '$0' : n >= 1000000 ? `$${(n/1000000).toFixed(1)}M` : n >= 1000 ? `$${(n/1000).toFixed(0)}K` : `$${n}`,
+  pct: (a, b) => b > 0 ? Math.round(a/b*100)+'%' : '—',
+};
+
+const cls = (...args) => args.filter(Boolean).join(' ');
+
+function stageColor(s) {
+  return { 'Idea':'bg-gray-100 text-gray-600', 'Pre-Launch':'bg-blue-100 text-blue-700', 'Early Stage':'bg-emerald-100 text-emerald-700', 'Growth Stage':'bg-amber-100 text-amber-700', 'Mature':'bg-purple-100 text-purple-700' }[s] || 'bg-gray-100 text-gray-600';
+}
+function tierBadge(t) {
+  return { 1:'bg-[#FFCD00] text-gray-900 font-semibold', 2:'bg-blue-100 text-blue-700', 3:'bg-gray-100 text-gray-600' }[t] || 'bg-gray-100 text-gray-600';
+}
+function updateTypeBadge(t) {
+  return { 'Investment':'bg-green-100 text-green-700','Milestone':'bg-blue-100 text-blue-700','Media':'bg-purple-100 text-purple-700','Customer':'bg-orange-100 text-orange-700','Award':'bg-yellow-100 text-yellow-700','Team':'bg-gray-100 text-gray-600','Partnership':'bg-indigo-100 text-indigo-700' }[t] || 'bg-gray-100 text-gray-600';
+}
+function connectionStatusBadge(s) {
+  return { 'Active':'bg-green-100 text-green-700','Pending':'bg-yellow-100 text-yellow-700','Completed':'bg-gray-100 text-gray-600','Declined':'bg-red-100 text-red-700' }[s] || 'bg-gray-100';
+}
+
+// ─── TOAST CONTEXT ───────────────────────────────────────────────────────────
+const ToastCtx = createContext(null);
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+  const show = useCallback((msg, type='success') => {
+    const id = Date.now();
+    setToasts(t => [...t, { id, msg, type }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500);
+  }, []);
+  return (
+    <ToastCtx.Provider value={show}>
+      {children}
+      <div className="fixed bottom-4 right-4 space-y-2 z-50">
+        {toasts.map(t => (
+          <div key={t.id} className={cls('px-4 py-3 rounded-lg shadow-lg text-sm font-medium text-white flex items-center gap-2 animate-pulse',
+            t.type==='error' ? 'bg-red-500' : t.type==='info' ? 'bg-blue-500' : 'bg-green-500')}>
+            <span>{t.type==='error'?'✗':t.type==='info'?'ℹ':'✓'}</span>
+            {t.msg}
+          </div>
+        ))}
+      </div>
+    </ToastCtx.Provider>
+  );
+}
+const useToast = () => useContext(ToastCtx);
+
+// ─── SHARED COMPONENTS ───────────────────────────────────────────────────────
+function Modal({ title, onClose, children, wide }) {
+  useEffect(() => {
+    const h = e => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-40 p-4" onClick={e => e.target===e.currentTarget && onClose()}>
+      <div className={cls('bg-white rounded-2xl shadow-xl w-full max-h-[90vh] overflow-y-auto', wide ? 'max-w-3xl' : 'max-w-lg')}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
+          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div className="p-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Btn({ children, onClick, variant='primary', size='md', disabled, className, type='button' }) {
+  const base = 'inline-flex items-center gap-1.5 font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed';
+  const sizes = { sm:'px-3 py-1.5 text-sm', md:'px-4 py-2 text-sm', lg:'px-5 py-2.5 text-base' };
+  const variants = {
+    primary: 'bg-[#FFCD00] text-gray-900 hover:bg-yellow-300 shadow-sm',
+    secondary: 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm',
+    danger: 'bg-red-500 text-white hover:bg-red-600 shadow-sm',
+    ghost: 'text-gray-600 hover:bg-gray-100',
+    green: 'bg-green-500 text-white hover:bg-green-600 shadow-sm',
+  };
+  return <button type={type} onClick={onClick} disabled={disabled} className={cls(base, sizes[size], variants[variant], className)}>{children}</button>;
+}
+
+function Badge({ text, className }) {
+  return <span className={cls('inline-block px-2.5 py-0.5 rounded-full text-xs font-medium', className)}>{text}</span>;
+}
+
+function StarRating({ value, onChange, readonly }) {
+  return (
+    <div className="flex gap-1">
+      {[1,2,3,4,5].map(s => (
+        <button key={s} type="button" onClick={() => !readonly && onChange && onChange(s)}
+          className={cls('text-2xl transition-transform', readonly ? 'cursor-default' : 'hover:scale-110 cursor-pointer',
+            s <= (value||0) ? 'text-[#FFCD00]' : 'text-gray-200')}>★</button>
+      ))}
+    </div>
+  );
+}
+
+function SearchInput({ value, onChange, placeholder }) {
+  return (
+    <div className="relative">
+      <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+      <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder||'Search...'}
+        className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:border-[#FFCD00]" />
+    </div>
+  );
+}
+
+function Field({ label, children, required }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}{required&&<span className="text-red-400 ml-0.5">*</span>}</label>
+      {children}
+    </div>
+  );
+}
+
+function Input({ ...props }) {
+  return <input {...props} className={cls('w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#FFCD00]', props.className)} />;
+}
+
+function Select({ children, ...props }) {
+  return <select {...props} className={cls('w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#FFCD00] bg-white', props.className)}>{children}</select>;
+}
+
+function Textarea({ ...props }) {
+  return <textarea {...props} rows={props.rows||3} className={cls('w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#FFCD00] resize-none', props.className)} />;
+}
+
+function SkillsEditor({ value=[], onChange, options=SKILLS }) {
+  const [input, setInput] = useState('');
+  const add = s => { if (s && !value.includes(s)) { onChange([...value, s]); setInput(''); } };
+  const remove = s => onChange(value.filter(x => x !== s));
+  const filtered = options.filter(o => !value.includes(o) && o.toLowerCase().includes(input.toLowerCase()));
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-2 min-h-[32px]">
+        {value.map(s => (
+          <span key={s} className="inline-flex items-center gap-1 bg-[#FFCD00] text-gray-900 text-xs font-medium px-2 py-1 rounded-full">
+            {s}<button type="button" onClick={() => remove(s)} className="hover:text-red-600 font-bold">&times;</button>
+          </span>
+        ))}
+      </div>
+      <div className="relative">
+        <Input value={input} onChange={e=>setInput(e.target.value)} placeholder="Type to search skills..." />
+        {input && filtered.length > 0 && (
+          <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
+            {filtered.slice(0,8).map(o => (
+              <button key={o} type="button" onClick={() => add(o)} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">{o}</button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon, title, desc, action }) {
+  return (
+    <div className="text-center py-16">
+      <div className="text-5xl mb-3">{icon}</div>
+      <h3 className="text-lg font-semibold text-gray-900 mb-1">{title}</h3>
+      <p className="text-gray-500 text-sm mb-4">{desc}</p>
+      {action}
+    </div>
+  );
+}
+
+function StatCard({ icon, label, value, sub, color='gold' }) {
+  const colors = { gold:'bg-[#FFCD00]', blue:'bg-blue-500', green:'bg-green-500', purple:'bg-purple-500', orange:'bg-orange-500' };
+  return (
+    <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm text-gray-500 font-medium mb-1">{label}</p>
+          <p className="text-3xl font-bold text-gray-900">{value}</p>
+          {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+        </div>
+        <div className={cls('w-10 h-10 rounded-xl flex items-center justify-center text-xl', colors[color])}>{icon}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SIDEBAR ─────────────────────────────────────────────────────────────────
+function Sidebar({ page, setPage, user, onLogout }) {
+  const links = [
+    { id:'dashboard', label:'Dashboard', icon:'📊' },
+    { id:'events', label:'Events', icon:'📅' },
+    { id:'mentors', label:'Mentors', icon:'🧑‍🏫' },
+    { id:'startups', label:'Startups', icon:'🚀' },
+    { id:'match', label:'Match', icon:'🔗' },
+    { id:'reports', label:'Reports', icon:'📈' },
+  ];
+  if (user?.role === 'admin') links.push({ id:'settings', label:'Settings', icon:'⚙️' });
+  return (
+    <div className="w-56 bg-gray-900 text-white flex flex-col flex-shrink-0 h-screen sticky top-0">
+      <div className="px-4 py-5 border-b border-gray-700">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 bg-[#FFCD00] rounded-xl flex items-center justify-center text-gray-900 font-bold text-base">J</div>
+          <div>
+            <div className="font-bold text-sm leading-tight">JPEC CRM</div>
+            <div className="text-gray-400 text-xs">University of Iowa</div>
+          </div>
+        </div>
+      </div>
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        {links.map(l => (
+          <button key={l.id} onClick={() => setPage(l.id)}
+            className={cls('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm sidebar-link text-left',
+              page===l.id ? 'bg-[#FFCD00] text-gray-900 font-semibold' : 'text-gray-300 hover:bg-gray-800 hover:text-white')}>
+            <span className="text-base">{l.icon}</span>
+            {l.label}
+          </button>
+        ))}
+      </nav>
+      <div className="px-3 py-4 border-t border-gray-700">
+        <div className="px-3 py-2 mb-2">
+          <p className="text-xs font-medium text-white truncate">{user?.name}</p>
+          <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+        </div>
+        <button onClick={onLogout} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg">
+          <span>🚪</span> Sign Out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── LOGIN ───────────────────────────────────────────────────────────────────
+function Login({ onLogin }) {
+  const [email, setEmail] = useState('');
+  const [pass, setPass] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const submit = async e => {
+    e.preventDefault(); setLoading(true); setError('');
+    try {
+      const r = await fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email, password:pass }) });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Invalid credentials'); }
+      onLogin(await r.json());
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+  return (
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="text-center px-8 pt-8 pb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#FFCD00] rounded-2xl mb-4 shadow-lg">
+            <span className="text-3xl font-bold text-gray-900">J</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">JPEC CRM</h1>
+          <p className="text-gray-500 text-sm mt-1">John Pappajohn Entrepreneurial Center</p>
+          <p className="text-gray-400 text-xs mt-0.5">University of Iowa</p>
+        </div>
+        <form onSubmit={submit} className="px-8 pb-8 space-y-4">
+          {error && <div className="bg-red-50 text-red-600 text-sm px-3 py-2 rounded-lg">{error}</div>}
+          <Field label="Email"><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@jpec.uiowa.edu" required /></Field>
+          <Field label="Password"><Input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" required /></Field>
+          <Btn type="submit" disabled={loading} className="w-full justify-center py-2.5 text-base">
+            {loading ? 'Signing in…' : 'Sign In'}
+          </Btn>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── DASHBOARD ───────────────────────────────────────────────────────────────
+function Dashboard({ setPage }) {
+  const [stats, setStats] = useState(null);
+  const toast = useToast();
+  useEffect(() => { api.get('/api/stats').then(setStats).catch(() => toast('Failed to load stats','error')); }, []);
+  if (!stats) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <StatCard icon="🧑‍🏫" label="Active Mentors" value={stats.mentors} color="gold" />
+        <StatCard icon="🚀" label="Active Startups" value={stats.startups} color="blue" />
+        <StatCard icon="📅" label="Total Events" value={stats.events} color="purple" />
+        <StatCard icon="🔗" label="Active Connections" value={stats.connections} color="green" />
+        <StatCard icon="⏳" label="Pending Requests" value={stats.pending} color="orange" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Pending Connections */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+            <h2 className="font-semibold text-gray-900">⏳ Pending Requests</h2>
+            <Btn size="sm" variant="ghost" onClick={() => setPage('match')}>View All →</Btn>
+          </div>
+          {stats.pendingConnections.length === 0
+            ? <p className="text-gray-400 text-sm p-5">No pending requests.</p>
+            : <div className="divide-y divide-gray-50">
+                {stats.pendingConnections.map(c => (
+                  <div key={c.id} className="px-5 py-3 flex items-center gap-3">
+                    <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center text-sm">🔗</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{c.mentor_name} ↔ {c.startup_name}</p>
+                      <p className="text-xs text-gray-400">{fmt.date(c.created_at)}</p>
+                    </div>
+                    <Badge text="Pending" className={connectionStatusBadge('Pending')} />
+                  </div>
+                ))}
+              </div>}
+        </div>
+
+        {/* Recent Activity */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+            <h2 className="font-semibold text-gray-900">📰 Startup News</h2>
+            <Btn size="sm" variant="ghost" onClick={() => setPage('startups')}>View All →</Btn>
+          </div>
+          {stats.recentUpdates.length === 0
+            ? <p className="text-gray-400 text-sm p-5">No updates yet.</p>
+            : <div className="divide-y divide-gray-50">
+                {stats.recentUpdates.map(u => (
+                  <div key={u.id} className="px-5 py-3 flex items-start gap-3">
+                    <Badge text={u.type} className={cls('mt-0.5 flex-shrink-0', updateTypeBadge(u.type))} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{u.title}</p>
+                      <p className="text-xs text-gray-400">{u.startup_name} · {fmt.date(u.date)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Events */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+            <h2 className="font-semibold text-gray-900">📅 Recent Events</h2>
+            <Btn size="sm" variant="ghost" onClick={() => setPage('events')}>Manage →</Btn>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {stats.recentEvents.map(e => (
+              <div key={e.id} className="px-5 py-3 flex items-center gap-3">
+                <Badge text={`Tier ${e.tier}`} className={tierBadge(e.tier)} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{e.name}</p>
+                  <p className="text-xs text-gray-400">{fmt.date(e.date)} · {e.type}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Top Mentors */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+            <h2 className="font-semibold text-gray-900">⭐ Most Active Mentors</h2>
+            <Btn size="sm" variant="ghost" onClick={() => setPage('mentors')}>View All →</Btn>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {stats.topMentors.map((m, i) => (
+              <div key={m.id} className="px-5 py-3 flex items-center gap-3">
+                <div className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600">{i+1}</div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">{m.name}</p>
+                  <p className="text-xs text-gray-400">{m.industry}</p>
+                </div>
+                <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">{m.connections} active</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── EVENTS ──────────────────────────────────────────────────────────────────
+function Events() {
+  const [events, setEvents] = useState([]);
+  const [search, setSearch] = useState('');
+  const [filterTier, setFilterTier] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editEvt, setEditEvt] = useState(null);
+  const toast = useToast();
+
+  const load = () => {
+    const p = new URLSearchParams({ search, tier:filterTier, type:filterType });
+    api.get('/api/events?'+p).then(setEvents);
+  };
+  useEffect(load, [search, filterTier, filterType]);
+
+  if (selected) return <EventDetail eventId={selected} onBack={() => { setSelected(null); load(); }} />;
+
+  const handleSave = async data => {
+    if (editEvt) { await api.put(`/api/events/${editEvt.id}`, data); toast('Event updated'); }
+    else { await api.post('/api/events', data); toast('Event created'); }
+    setShowForm(false); setEditEvt(null); load();
+  };
+
+  const handleDelete = async id => {
+    if (!confirm('Delete this event?')) return;
+    await api.del(`/api/events/${id}`);
+    toast('Event deleted'); load();
+  };
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Events</h1>
+        <Btn onClick={() => { setEditEvt(null); setShowForm(true); }}>+ New Event</Btn>
+      </div>
+      <div className="flex flex-wrap gap-3 mb-5">
+        <div className="flex-1 min-w-48"><SearchInput value={search} onChange={setSearch} placeholder="Search events…" /></div>
+        <Select value={filterTier} onChange={e=>setFilterTier(e.target.value)} className="w-36">
+          <option value="">All Tiers</option>
+          {[1,2,3].map(t=><option key={t} value={t}>Tier {t}</option>)}
+        </Select>
+        <Select value={filterType} onChange={e=>setFilterType(e.target.value)} className="w-44">
+          <option value="">All Types</option>
+          {EVENT_TYPES.map(t=><option key={t}>{t}</option>)}
+        </Select>
+      </div>
+
+      {events.length === 0
+        ? <EmptyState icon="📅" title="No events found" desc="Create your first event to start tracking attendance." action={<Btn onClick={() => setShowForm(true)}>Create Event</Btn>} />
+        : (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead><tr className="bg-gray-50 border-b border-gray-100">
+                {['Event','Date','Type','Tier','Registered','Attended','Rate',''].map(h=>(
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                ))}
+              </tr></thead>
+              <tbody className="divide-y divide-gray-50">
+                {events.map(e => (
+                  <tr key={e.id} className="hover:bg-gray-50/50">
+                    <td className="px-4 py-3">
+                      <button onClick={() => setSelected(e.id)} className="font-medium text-gray-900 hover:text-yellow-600 text-left">{e.name}</button>
+                      {e.location && <p className="text-xs text-gray-400 truncate max-w-48">{e.location}</p>}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{fmt.date(e.date)}</td>
+                    <td className="px-4 py-3 text-gray-600">{e.type}</td>
+                    <td className="px-4 py-3"><Badge text={`Tier ${e.tier}`} className={tierBadge(e.tier)} /></td>
+                    <td className="px-4 py-3 text-gray-900 font-medium">{e.reg_count||0}</td>
+                    <td className="px-4 py-3 text-gray-900 font-medium">{e.att_count||0}</td>
+                    <td className="px-4 py-3">
+                      <span className={cls('font-medium', (e.att_count||0)/(e.reg_count||1)>=0.7?'text-green-600':'text-orange-500')}>
+                        {fmt.pct(e.att_count||0, e.reg_count||0)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        <Btn size="sm" variant="ghost" onClick={() => setSelected(e.id)}>View</Btn>
+                        <Btn size="sm" variant="ghost" onClick={() => { setEditEvt(e); setShowForm(true); }}>Edit</Btn>
+                        <Btn size="sm" variant="ghost" onClick={() => handleDelete(e.id)} className="text-red-400 hover:text-red-600">Del</Btn>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+      {showForm && (
+        <Modal title={editEvt?'Edit Event':'New Event'} onClose={() => { setShowForm(false); setEditEvt(null); }}>
+          <EventForm initial={editEvt} onSave={handleSave} onCancel={() => { setShowForm(false); setEditEvt(null); }} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function EventForm({ initial, onSave, onCancel }) {
+  const [f, setF] = useState({ name:'', date:'', type:'Workshop', tier:2, description:'', location:'', ...initial });
+  const set = k => v => setF(p => ({...p, [k]:v}));
+  return (
+    <div className="space-y-4">
+      <Field label="Event Name" required><Input value={f.name} onChange={e=>set('name')(e.target.value)} placeholder="e.g. Ideastorm Spring 2026" /></Field>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Date" required><Input type="date" value={f.date} onChange={e=>set('date')(e.target.value)} /></Field>
+        <Field label="Tier" required>
+          <Select value={f.tier} onChange={e=>set('tier')(parseInt(e.target.value))}>
+            <option value={1}>Tier 1 — Flagship</option>
+            <option value={2}>Tier 2 — Core</option>
+            <option value={3}>Tier 3 — Regular</option>
+          </Select>
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Type"><Select value={f.type} onChange={e=>set('type')(e.target.value)}>{EVENT_TYPES.map(t=><option key={t}>{t}</option>)}</Select></Field>
+        <Field label="Location"><Input value={f.location} onChange={e=>set('location')(e.target.value)} placeholder="Building, Room" /></Field>
+      </div>
+      <Field label="Description"><Textarea value={f.description} onChange={e=>set('description')(e.target.value)} placeholder="Brief description of the event…" rows={3} /></Field>
+      <div className="flex gap-3 pt-2">
+        <Btn onClick={() => onSave(f)} className="flex-1 justify-center">Save Event</Btn>
+        <Btn variant="secondary" onClick={onCancel}>Cancel</Btn>
+      </div>
+    </div>
+  );
+}
+
+function EventDetail({ eventId, onBack }) {
+  const [data, setData] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newName, setNewName] = useState(''); const [newEmail, setNewEmail] = useState(''); const [newAff, setNewAff] = useState('Student');
+  const toast = useToast();
+
+  const load = () => api.get(`/api/events/${eventId}`).then(setData);
+  useEffect(load, [eventId]);
+  if (!data) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
+
+  const addAttendee = async () => {
+    if (!newName.trim()) return toast('Name required','error');
+    await api.post(`/api/events/${eventId}/attendees`, { name:newName, email:newEmail, affiliation:newAff });
+    setNewName(''); setNewEmail(''); setShowAdd(false); toast('Attendee added'); load();
+  };
+
+  const toggleAttended = async (a) => {
+    await api.put(`/api/events/${eventId}/attendees/${a.id}`, { attended: !a.attended });
+    load();
+  };
+
+  const removeAttendee = async (aid) => {
+    if (!confirm('Remove attendee?')) return;
+    await api.del(`/api/events/${eventId}/attendees/${aid}`);
+    toast('Removed'); load();
+  };
+
+  const aff = data.stats?.byAffiliation || {};
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 mb-4">← Back to Events</button>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-2xl font-bold text-gray-900">{data.name}</h1>
+            <Badge text={`Tier ${data.tier}`} className={tierBadge(data.tier)} />
+            <Badge text={data.type} className="bg-gray-100 text-gray-600" />
+          </div>
+          <p className="text-gray-500 text-sm">{fmt.date(data.date)} · {data.location}</p>
+          {data.description && <p className="text-gray-600 text-sm mt-2 max-w-xl">{data.description}</p>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <StatCard icon="📝" label="Registered" value={data.stats?.registered||0} color="blue" />
+        <StatCard icon="✅" label="Attended" value={data.stats?.attended||0} color="green" />
+        <StatCard icon="📊" label="Conversion Rate" value={fmt.pct(data.stats?.attended||0, data.stats?.registered||0)} color="gold" />
+      </div>
+
+      {Object.keys(aff).length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mb-6">
+          <h3 className="font-semibold text-gray-900 mb-3">Attendance by Affiliation</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {Object.entries(aff).map(([a, v]) => (
+              <div key={a} className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs font-medium text-gray-500">{a}</p>
+                <p className="text-lg font-bold text-gray-900">{v.att}/{v.reg}</p>
+                <p className="text-xs text-gray-400">{fmt.pct(v.att, v.reg)} attended</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">Attendees ({data.attendees?.length||0})</h2>
+          <Btn size="sm" onClick={() => setShowAdd(p=>!p)}>+ Add Attendee</Btn>
+        </div>
+        {showAdd && (
+          <div className="px-5 py-4 bg-yellow-50 border-b border-yellow-100 flex flex-wrap gap-3 items-end">
+            <Field label="Name"><Input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Full name" className="w-44" /></Field>
+            <Field label="Email"><Input value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="email@example.com" className="w-52" /></Field>
+            <Field label="Affiliation">
+              <Select value={newAff} onChange={e=>setNewAff(e.target.value)} className="w-36">
+                {AFFILIATIONS.map(a=><option key={a}>{a}</option>)}
+              </Select>
+            </Field>
+            <div className="flex gap-2">
+              <Btn onClick={addAttendee}>Add</Btn>
+              <Btn variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Btn>
+            </div>
+          </div>
+        )}
+        {data.attendees?.length === 0
+          ? <p className="text-gray-400 text-sm p-5">No attendees yet. Add the first one above.</p>
+          : <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase">Name</th>
+                  <th className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase">Email</th>
+                  <th className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase">Affiliation</th>
+                  <th className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase">Attended</th>
+                  <th className="px-4 py-3"></th>
+                </tr></thead>
+                <tbody className="divide-y divide-gray-50">
+                  {data.attendees.map(a => (
+                    <tr key={a.id} className="hover:bg-gray-50/50">
+                      <td className="px-4 py-3 font-medium text-gray-900">{a.name}</td>
+                      <td className="px-4 py-3 text-gray-500">{a.email||'—'}</td>
+                      <td className="px-4 py-3"><Badge text={a.affiliation} className="bg-gray-100 text-gray-600" /></td>
+                      <td className="px-4 py-3">
+                        <button onClick={() => toggleAttended(a)}
+                          className={cls('w-10 h-6 rounded-full transition-colors relative', a.attended ? 'bg-green-500' : 'bg-gray-200')}>
+                          <span className={cls('absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform', a.attended ? 'translate-x-4' : 'translate-x-0.5')}/>
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Btn size="sm" variant="ghost" onClick={() => removeAttendee(a.id)} className="text-red-400 hover:text-red-600">Remove</Btn>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── MENTORS ─────────────────────────────────────────────────────────────────
+function Mentors() {
+  const [mentors, setMentors] = useState([]);
+  const [search, setSearch] = useState('');
+  const [filterInd, setFilterInd] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editM, setEditM] = useState(null);
+  const toast = useToast();
+
+  const load = () => {
+    const p = new URLSearchParams({ search, industry:filterInd });
+    api.get('/api/mentors?'+p).then(setMentors);
+  };
+  useEffect(load, [search, filterInd]);
+
+  if (selected) return <MentorDetail mentorId={selected} onBack={() => { setSelected(null); load(); }} />;
+
+  const handleSave = async data => {
+    if (editM) { await api.put(`/api/mentors/${editM.id}`, { ...data, active: true }); toast('Mentor updated'); }
+    else { await api.post('/api/mentors', data); toast('Mentor added'); }
+    setShowForm(false); setEditM(null); load();
+  };
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Mentors</h1>
+        <Btn onClick={() => { setEditM(null); setShowForm(true); }}>+ Add Mentor</Btn>
+      </div>
+      <div className="flex flex-wrap gap-3 mb-5">
+        <div className="flex-1 min-w-48"><SearchInput value={search} onChange={setSearch} placeholder="Search by name, skills, company…" /></div>
+        <Select value={filterInd} onChange={e=>setFilterInd(e.target.value)} className="w-44">
+          <option value="">All Industries</option>
+          {INDUSTRIES.map(i=><option key={i}>{i}</option>)}
+        </Select>
+      </div>
+
+      {mentors.length === 0
+        ? <EmptyState icon="🧑‍🏫" title="No mentors found" desc="Add your first mentor to get started." action={<Btn onClick={()=>setShowForm(true)}>Add Mentor</Btn>} />
+        : <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {mentors.map(m => (
+              <div key={m.id} className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelected(m.id)}>
+                <div className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="w-12 h-12 bg-[#FFCD00] rounded-xl flex items-center justify-center text-xl font-bold text-gray-900">{m.name[0]}</div>
+                    <div className="text-right">
+                      {m.avg_rating && <div className="flex items-center gap-1 text-sm"><span className="text-yellow-400">★</span><span className="font-medium">{m.avg_rating}</span></div>}
+                      <Badge text={m.active_connections > 0 ? `${m.active_connections} active` : 'Available'} className={m.active_connections > 0 ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'} />
+                    </div>
+                  </div>
+                  <h3 className="font-semibold text-gray-900">{m.name}</h3>
+                  <p className="text-sm text-gray-500">{m.company}</p>
+                  <p className="text-xs text-gray-400 mb-3">{m.industry} · {m.hours_per_week} hrs/wk</p>
+                  <div className="flex flex-wrap gap-1">
+                    {m.skills.slice(0,3).map(s => <span key={s} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{s}</span>)}
+                    {m.skills.length > 3 && <span className="text-xs text-gray-400">+{m.skills.length-3}</span>}
+                  </div>
+                </div>
+                <div className="px-5 py-3 border-t border-gray-50 flex items-center justify-between">
+                  <span className="text-xs text-gray-400">AM: {m.account_manager||'—'}</span>
+                  <Btn size="sm" variant="ghost" onClick={e=>{e.stopPropagation();setEditM(m);setShowForm(true);}}>Edit</Btn>
+                </div>
+              </div>
+            ))}
+          </div>}
+
+      {showForm && (
+        <Modal title={editM?'Edit Mentor':'Add Mentor'} onClose={() => { setShowForm(false); setEditM(null); }} wide>
+          <MentorForm initial={editM} onSave={handleSave} onCancel={() => { setShowForm(false); setEditM(null); }} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function MentorForm({ initial, onSave, onCancel }) {
+  const [f, setF] = useState({ name:'', email:'', phone:'', bio:'', company:'', industry:'', skills:[], hours_per_week:2, stage_pref:'Any', account_manager:'', linkedin:'', ...initial });
+  const set = k => v => setF(p => ({...p, [k]:v}));
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Full Name" required><Input value={f.name} onChange={e=>set('name')(e.target.value)} placeholder="Sarah Chen" /></Field>
+        <Field label="Company / Organization"><Input value={f.company} onChange={e=>set('company')(e.target.value)} placeholder="TechVentures LLC" /></Field>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Email"><Input type="email" value={f.email} onChange={e=>set('email')(e.target.value)} placeholder="sarah@example.com" /></Field>
+        <Field label="Phone"><Input value={f.phone} onChange={e=>set('phone')(e.target.value)} placeholder="319-555-0101" /></Field>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Industry">
+          <Select value={f.industry} onChange={e=>set('industry')(e.target.value)}>
+            <option value="">Select industry</option>
+            {INDUSTRIES.map(i=><option key={i}>{i}</option>)}
+          </Select>
+        </Field>
+        <Field label="LinkedIn"><Input value={f.linkedin} onChange={e=>set('linkedin')(e.target.value)} placeholder="linkedin.com/in/…" /></Field>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Hours/Week Available"><Input type="number" min="0" max="40" value={f.hours_per_week} onChange={e=>set('hours_per_week')(parseFloat(e.target.value))} /></Field>
+        <Field label="Preferred Startup Stage">
+          <Select value={f.stage_pref} onChange={e=>set('stage_pref')(e.target.value)}>{STAGE_PREFS.map(s=><option key={s}>{s}</option>)}</Select>
+        </Field>
+      </div>
+      <Field label="Account Manager (JPEC Staff)"><Input value={f.account_manager} onChange={e=>set('account_manager')(e.target.value)} placeholder="Harry, Dana, etc." /></Field>
+      <Field label="Skills & Expertise"><SkillsEditor value={f.skills} onChange={set('skills')} /></Field>
+      <Field label="Bio"><Textarea value={f.bio} onChange={e=>set('bio')(e.target.value)} placeholder="Background, experience, what they love helping with…" rows={4} /></Field>
+      <div className="flex gap-3 pt-2">
+        <Btn onClick={() => { if(!f.name.trim()) return alert('Name required'); onSave(f); }} className="flex-1 justify-center">Save Mentor</Btn>
+        <Btn variant="secondary" onClick={onCancel}>Cancel</Btn>
+      </div>
+    </div>
+  );
+}
+
+function MentorDetail({ mentorId, onBack }) {
+  const [data, setData] = useState(null);
+  const [showLog, setShowLog] = useState(false);
+  const [startups, setStartups] = useState([]);
+  const [log, setLog] = useState({ startup_id:'', date:new Date().toISOString().slice(0,10), type:'Meeting', description:'', rating:null });
+  const toast = useToast();
+
+  const load = () => api.get(`/api/mentors/${mentorId}`).then(setData);
+  useEffect(() => { load(); api.get('/api/startups').then(setStartups); }, [mentorId]);
+  if (!data) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
+
+  const logInteraction = async () => {
+    if (!log.date) return toast('Date required','error');
+    await api.post(`/api/mentors/${mentorId}/interactions`, { ...log, startup_id: log.startup_id || null });
+    toast('Interaction logged'); setShowLog(false); setLog(p=>({...p, description:'', rating:null, startup_id:''})); load();
+  };
+
+  const updateConn = async (cid, status) => {
+    await api.put(`/api/connections/${cid}`, { status, notes:data.connections.find(c=>c.id===cid)?.notes||'' });
+    toast(`Connection ${status.toLowerCase()}`); load();
+  };
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 mb-4">← Back to Mentors</button>
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-5">
+        <div className="flex items-start gap-5">
+          <div className="w-16 h-16 bg-[#FFCD00] rounded-2xl flex items-center justify-center text-2xl font-bold text-gray-900 flex-shrink-0">{data.name[0]}</div>
+          <div className="flex-1">
+            <div className="flex items-start justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">{data.name}</h1>
+                <p className="text-gray-500">{data.company} · {data.industry}</p>
+                {data.linkedin && <a href={`https://${data.linkedin}`} target="_blank" className="text-blue-500 text-sm hover:underline">{data.linkedin}</a>}
+              </div>
+              <div className="text-right">
+                {data.avg_rating && <div className="flex items-center gap-1 justify-end mb-1"><StarRating value={Math.round(data.avg_rating)} readonly /><span className="text-sm font-medium text-gray-600">{data.avg_rating}</span></div>}
+                <p className="text-xs text-gray-400">Account Manager: <span className="font-medium text-gray-700">{data.account_manager||'—'}</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-5 pt-5 border-t border-gray-100">
+          <div><p className="text-xs text-gray-400">Email</p><p className="text-sm font-medium text-gray-900">{data.email||'—'}</p></div>
+          <div><p className="text-xs text-gray-400">Phone</p><p className="text-sm font-medium text-gray-900">{data.phone||'—'}</p></div>
+          <div><p className="text-xs text-gray-400">Hours/Week</p><p className="text-sm font-medium text-gray-900">{data.hours_per_week}h available</p></div>
+          <div><p className="text-xs text-gray-400">Stage Preference</p><p className="text-sm font-medium text-gray-900">{data.stage_pref}</p></div>
+        </div>
+        {data.bio && <p className="text-sm text-gray-600 mt-4 pt-4 border-t border-gray-100">{data.bio}</p>}
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <p className="text-xs text-gray-400 mb-2">Skills & Expertise</p>
+          <div className="flex flex-wrap gap-1.5">
+            {data.skills.map(s => <span key={s} className="bg-[#FFCD00] text-gray-900 text-xs font-medium px-2.5 py-1 rounded-full">{s}</span>)}
+          </div>
+        </div>
+      </div>
+
+      {/* Active connections */}
+      {data.connections.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-5">
+          <h2 className="font-semibold text-gray-900 px-5 py-4 border-b border-gray-100">Startup Connections</h2>
+          <div className="divide-y divide-gray-50">
+            {data.connections.map(c => (
+              <div key={c.id} className="px-5 py-4 flex items-center gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="font-medium text-gray-900">{c.startup_name}</p>
+                    <Badge text={c.status} className={connectionStatusBadge(c.status)} />
+                    <Badge text={c.startup_stage} className={stageColor(c.startup_stage)} />
+                  </div>
+                  {c.notes && <p className="text-sm text-gray-500">{c.notes}</p>}
+                  <p className="text-xs text-gray-400">{fmt.date(c.created_at)}</p>
+                </div>
+                {c.status === 'Pending' && (
+                  <div className="flex gap-2">
+                    <Btn size="sm" variant="green" onClick={() => updateConn(c.id, 'Active')}>Approve</Btn>
+                    <Btn size="sm" variant="danger" onClick={() => updateConn(c.id, 'Declined')}>Decline</Btn>
+                  </div>
+                )}
+                {c.status === 'Active' && (
+                  <Btn size="sm" variant="secondary" onClick={() => updateConn(c.id, 'Completed')}>Mark Done</Btn>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Interaction log */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">Interaction History ({data.interactions.length})</h2>
+          <Btn size="sm" onClick={() => setShowLog(p=>!p)}>+ Log Interaction</Btn>
+        </div>
+        {showLog && (
+          <div className="px-5 py-4 bg-yellow-50 border-b border-yellow-100 space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Date"><Input type="date" value={log.date} onChange={e=>setLog(p=>({...p,date:e.target.value}))} /></Field>
+              <Field label="Type"><Select value={log.type} onChange={e=>setLog(p=>({...p,type:e.target.value}))}>
+                {['Meeting','Email','Event','Phone Call','Review','Other'].map(t=><option key={t}>{t}</option>)}
+              </Select></Field>
+              <Field label="Related Startup">
+                <Select value={log.startup_id} onChange={e=>setLog(p=>({...p,startup_id:e.target.value}))}>
+                  <option value="">None</option>
+                  {startups.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <Field label="Description"><Textarea value={log.description} onChange={e=>setLog(p=>({...p,description:e.target.value}))} placeholder="What was discussed? Key outcomes?" rows={2} /></Field>
+            <Field label="Rating (optional)">
+              <div className="flex items-center gap-3">
+                <StarRating value={log.rating} onChange={v=>setLog(p=>({...p,rating:v}))} />
+                {log.rating && <button type="button" onClick={()=>setLog(p=>({...p,rating:null}))} className="text-xs text-gray-400 hover:text-gray-600">Clear</button>}
+              </div>
+            </Field>
+            <div className="flex gap-2">
+              <Btn onClick={logInteraction}>Save</Btn>
+              <Btn variant="secondary" onClick={() => setShowLog(false)}>Cancel</Btn>
+            </div>
+          </div>
+        )}
+        {data.interactions.length === 0
+          ? <p className="text-gray-400 text-sm p-5">No interactions logged yet.</p>
+          : <div className="divide-y divide-gray-50">
+              {data.interactions.map(i => (
+                <div key={i.id} className="px-5 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <Badge text={i.type} className="bg-blue-100 text-blue-700" />
+                        {i.startup_name && <span className="text-xs font-medium text-gray-700">with {i.startup_name}</span>}
+                        <span className="text-xs text-gray-400">{fmt.date(i.date)}</span>
+                      </div>
+                      {i.description && <p className="text-sm text-gray-700">{i.description}</p>}
+                    </div>
+                    {i.rating && <StarRating value={i.rating} readonly />}
+                  </div>
+                </div>
+              ))}
+            </div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── STARTUPS ────────────────────────────────────────────────────────────────
+function Startups() {
+  const [startups, setStartups] = useState([]);
+  const [search, setSearch] = useState('');
+  const [filterStage, setFilterStage] = useState('');
+  const [filterInd, setFilterInd] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editS, setEditS] = useState(null);
+  const toast = useToast();
+
+  const load = () => {
+    const p = new URLSearchParams({ search, stage:filterStage, industry:filterInd });
+    api.get('/api/startups?'+p).then(setStartups);
+  };
+  useEffect(load, [search, filterStage, filterInd]);
+
+  if (selected) return <StartupDetail startupId={selected} onBack={() => { setSelected(null); load(); }} />;
+
+  const handleSave = async data => {
+    if (editS) { await api.put(`/api/startups/${editS.id}`, { ...data, active: true }); toast('Startup updated'); }
+    else { await api.post('/api/startups', data); toast('Startup added'); }
+    setShowForm(false); setEditS(null); load();
+  };
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Startups</h1>
+        <Btn onClick={() => { setEditS(null); setShowForm(true); }}>+ Add Startup</Btn>
+      </div>
+      <div className="flex flex-wrap gap-3 mb-5">
+        <div className="flex-1 min-w-48"><SearchInput value={search} onChange={setSearch} placeholder="Search startups…" /></div>
+        <Select value={filterStage} onChange={e=>setFilterStage(e.target.value)} className="w-40">
+          <option value="">All Stages</option>
+          {STAGES.map(s=><option key={s}>{s}</option>)}
+        </Select>
+        <Select value={filterInd} onChange={e=>setFilterInd(e.target.value)} className="w-40">
+          <option value="">All Industries</option>
+          {INDUSTRIES.map(i=><option key={i}>{i}</option>)}
+        </Select>
+      </div>
+
+      {startups.length === 0
+        ? <EmptyState icon="🚀" title="No startups found" desc="Track your first startup to get started." action={<Btn onClick={()=>setShowForm(true)}>Add Startup</Btn>} />
+        : <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {startups.map(s => (
+              <div key={s.id} className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelected(s.id)}>
+                <div className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="w-12 h-12 bg-gray-900 rounded-xl flex items-center justify-center text-xl font-bold text-[#FFCD00]">{s.name[0]}</div>
+                    <Badge text={s.stage} className={stageColor(s.stage)} />
+                  </div>
+                  <h3 className="font-semibold text-gray-900 mb-0.5">{s.name}</h3>
+                  <p className="text-xs text-gray-400 mb-2">{s.industry} {s.founded && `· Est. ${s.founded}`}</p>
+                  <p className="text-sm text-gray-600 line-clamp-2 mb-3">{s.description}</p>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {s.needs.slice(0,3).map(n => <span key={n} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{n}</span>)}
+                    {s.needs.length > 3 && <span className="text-xs text-gray-400">+{s.needs.length-3} more</span>}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <span>👥 {s.founder_count} founder{s.founder_count!==1?'s':''}</span>
+                    <span>🔗 {s.connection_count} mentor{s.connection_count!==1?'s':''}</span>
+                    {s.funding > 0 && <span>💰 {fmt.money(s.funding)}</span>}
+                  </div>
+                </div>
+                <div className="px-5 py-3 border-t border-gray-50 flex items-center justify-between">
+                  <span className="text-xs text-gray-400">AM: {s.account_manager||'—'}</span>
+                  <Btn size="sm" variant="ghost" onClick={e=>{e.stopPropagation();setEditS(s);setShowForm(true);}}>Edit</Btn>
+                </div>
+              </div>
+            ))}
+          </div>}
+
+      {showForm && (
+        <Modal title={editS?'Edit Startup':'Add Startup'} onClose={() => { setShowForm(false); setEditS(null); }} wide>
+          <StartupForm initial={editS} onSave={handleSave} onCancel={() => { setShowForm(false); setEditS(null); }} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function StartupForm({ initial, onSave, onCancel }) {
+  const [f, setF] = useState({ name:'', description:'', industry:'', stage:'Idea', founded:'', website:'', account_manager:'', needs:[], funding:0, ...initial });
+  const set = k => v => setF(p => ({...p, [k]:v}));
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Startup Name" required><Input value={f.name} onChange={e=>set('name')(e.target.value)} placeholder="HealthSync" /></Field>
+        <Field label="Industry">
+          <Select value={f.industry} onChange={e=>set('industry')(e.target.value)}>
+            <option value="">Select industry</option>
+            {INDUSTRIES.map(i=><option key={i}>{i}</option>)}
+          </Select>
+        </Field>
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <Field label="Stage"><Select value={f.stage} onChange={e=>set('stage')(e.target.value)}>{STAGES.map(s=><option key={s}>{s}</option>)}</Select></Field>
+        <Field label="Founded Year"><Input value={f.founded} onChange={e=>set('founded')(e.target.value)} placeholder="2024" /></Field>
+        <Field label="Total Funding ($)"><Input type="number" min="0" value={f.funding} onChange={e=>set('funding')(parseFloat(e.target.value)||0)} /></Field>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Website"><Input value={f.website} onChange={e=>set('website')(e.target.value)} placeholder="startupname.com" /></Field>
+        <Field label="Account Manager (JPEC Staff)"><Input value={f.account_manager} onChange={e=>set('account_manager')(e.target.value)} placeholder="Harry, Dana, etc." /></Field>
+      </div>
+      <Field label="Description"><Textarea value={f.description} onChange={e=>set('description')(e.target.value)} placeholder="What does this startup do? What problem are they solving?" rows={3} /></Field>
+      <Field label="Current Needs (what help do they need?)"><SkillsEditor value={f.needs} onChange={set('needs')} options={NEEDS} /></Field>
+      <div className="flex gap-3 pt-2">
+        <Btn onClick={() => { if(!f.name.trim()) return alert('Name required'); onSave(f); }} className="flex-1 justify-center">Save Startup</Btn>
+        <Btn variant="secondary" onClick={onCancel}>Cancel</Btn>
+      </div>
+    </div>
+  );
+}
+
+function StartupDetail({ startupId, onBack }) {
+  const [data, setData] = useState(null);
+  const [showAddFounder, setShowAddFounder] = useState(false);
+  const [showAddUpdate, setShowAddUpdate] = useState(false);
+  const [founder, setFounder] = useState({ name:'', email:'', phone:'', bio:'', linkedin:'', role:'Co-Founder' });
+  const [update, setUpdate] = useState({ date:new Date().toISOString().slice(0,10), type:'Milestone', title:'', description:'', url:'' });
+  const toast = useToast();
+
+  const load = () => api.get(`/api/startups/${startupId}`).then(setData);
+  useEffect(load, [startupId]);
+  if (!data) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
+
+  const addFounder = async () => {
+    if (!founder.name.trim()) return toast('Name required','error');
+    await api.post(`/api/startups/${startupId}/founders`, founder);
+    toast('Founder added'); setShowAddFounder(false); setFounder({ name:'', email:'', phone:'', bio:'', linkedin:'', role:'Co-Founder' }); load();
+  };
+
+  const removeFounder = async id => {
+    if (!confirm('Remove this founder?')) return;
+    await api.del(`/api/founders/${id}`);
+    toast('Founder removed'); load();
+  };
+
+  const addUpdate = async () => {
+    if (!update.title.trim()) return toast('Title required','error');
+    await api.post(`/api/startups/${startupId}/updates`, update);
+    toast('Update added'); setShowAddUpdate(false); setUpdate(p=>({...p, title:'', description:'', url:''})); load();
+  };
+
+  const updateConn = async (cid, status) => {
+    const conn = data.connections.find(c=>c.id===cid);
+    await api.put(`/api/connections/${cid}`, { status, notes: conn?.notes||'' });
+    toast(`Connection ${status.toLowerCase()}`); load();
+  };
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 mb-4">← Back to Startups</button>
+
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-5">
+        <div className="flex items-start gap-4 mb-5">
+          <div className="w-16 h-16 bg-gray-900 rounded-2xl flex items-center justify-center text-2xl font-bold text-[#FFCD00] flex-shrink-0">{data.name[0]}</div>
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-1 flex-wrap">
+              <h1 className="text-2xl font-bold text-gray-900">{data.name}</h1>
+              <Badge text={data.stage} className={stageColor(data.stage)} />
+              <Badge text={data.industry} className="bg-gray-100 text-gray-600" />
+            </div>
+            <p className="text-gray-500 text-sm">{data.website && <a href={`https://${data.website}`} target="_blank" className="text-blue-500 hover:underline mr-2">{data.website}</a>}{data.founded && `Founded ${data.founded}`}</p>
+          </div>
+          {data.funding > 0 && <div className="text-right"><p className="text-xs text-gray-400">Total Funding</p><p className="text-xl font-bold text-green-600">{fmt.money(data.funding)}</p></div>}
+        </div>
+        {data.description && <p className="text-gray-700 text-sm mb-4">{data.description}</p>}
+        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+          <div><p className="text-xs text-gray-400 mb-1">Account Manager</p><p className="text-sm font-medium">{data.account_manager||'—'}</p></div>
+          <div>
+            <p className="text-xs text-gray-400 mb-1">Current Needs</p>
+            <div className="flex flex-wrap gap-1">
+              {data.needs.map(n => <span key={n} className="text-xs bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full font-medium">{n}</span>)}
+              {data.needs.length === 0 && <span className="text-xs text-gray-400">None specified</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+        {/* Founders */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">👥 Founders ({data.founders.length})</h2>
+            <Btn size="sm" onClick={()=>setShowAddFounder(p=>!p)}>+ Add</Btn>
+          </div>
+          {showAddFounder && (
+            <div className="px-5 py-4 bg-yellow-50 border-b border-yellow-100 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Name"><Input value={founder.name} onChange={e=>setFounder(p=>({...p,name:e.target.value}))} placeholder="Full name" /></Field>
+                <Field label="Role"><Input value={founder.role} onChange={e=>setFounder(p=>({...p,role:e.target.value}))} placeholder="CEO & Co-Founder" /></Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Email"><Input value={founder.email} onChange={e=>setFounder(p=>({...p,email:e.target.value}))} /></Field>
+                <Field label="LinkedIn"><Input value={founder.linkedin} onChange={e=>setFounder(p=>({...p,linkedin:e.target.value}))} /></Field>
+              </div>
+              <Field label="Bio"><Textarea value={founder.bio} onChange={e=>setFounder(p=>({...p,bio:e.target.value}))} rows={2} /></Field>
+              <div className="flex gap-2"><Btn onClick={addFounder}>Add</Btn><Btn variant="secondary" onClick={()=>setShowAddFounder(false)}>Cancel</Btn></div>
+            </div>
+          )}
+          <div className="divide-y divide-gray-50">
+            {data.founders.map(f => (
+              <div key={f.id} className="px-5 py-4 flex items-start gap-3">
+                <div className="w-9 h-9 bg-[#FFCD00] rounded-full flex items-center justify-center font-bold text-sm text-gray-900 flex-shrink-0">{f.name[0]}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-900">{f.name}</p>
+                  <p className="text-xs text-gray-500">{f.role}</p>
+                  {f.email && <p className="text-xs text-blue-500">{f.email}</p>}
+                  {f.bio && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{f.bio}</p>}
+                </div>
+                <Btn size="sm" variant="ghost" onClick={()=>removeFounder(f.id)} className="text-red-400 hover:text-red-600 flex-shrink-0">×</Btn>
+              </div>
+            ))}
+            {data.founders.length === 0 && <p className="text-gray-400 text-sm px-5 py-4">No founders added yet.</p>}
+          </div>
+        </div>
+
+        {/* Connections */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <h2 className="font-semibold text-gray-900 px-5 py-4 border-b border-gray-100">🔗 Mentor Connections ({data.connections.length})</h2>
+          <div className="divide-y divide-gray-50">
+            {data.connections.map(c => (
+              <div key={c.id} className="px-5 py-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-medium text-gray-900">{c.mentor_name}</p>
+                      <Badge text={c.status} className={connectionStatusBadge(c.status)} />
+                    </div>
+                    <p className="text-xs text-gray-400">{c.mentor_industry} · {fmt.date(c.created_at)}</p>
+                    {c.notes && <p className="text-xs text-gray-500 mt-1">{c.notes}</p>}
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {c.mentor_skills.slice(0,3).map(s=><span key={s} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{s}</span>)}
+                    </div>
+                  </div>
+                  {c.status==='Pending' && (
+                    <div className="flex gap-1 flex-shrink-0">
+                      <Btn size="sm" variant="green" onClick={()=>updateConn(c.id,'Active')}>✓</Btn>
+                      <Btn size="sm" variant="danger" onClick={()=>updateConn(c.id,'Declined')}>✗</Btn>
+                    </div>
+                  )}
+                  {c.status==='Active' && <Btn size="sm" variant="secondary" onClick={()=>updateConn(c.id,'Completed')}>Done</Btn>}
+                </div>
+                {c.status==='Active' && (
+                  <div className="mt-2 flex gap-3 text-xs text-gray-400">
+                    <span>Startup rating: <StarRating value={c.startup_rating} readonly /></span>
+                    <span>Mentor rating: <StarRating value={c.mentor_rating} readonly /></span>
+                  </div>
+                )}
+              </div>
+            ))}
+            {data.connections.length === 0 && <p className="text-gray-400 text-sm px-5 py-4">No mentor connections yet. Use the Match page to find mentors.</p>}
+          </div>
+        </div>
+      </div>
+
+      {/* Updates / News */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">📰 News & Updates ({data.updates.length})</h2>
+          <Btn size="sm" onClick={()=>setShowAddUpdate(p=>!p)}>+ Add Update</Btn>
+        </div>
+        {showAddUpdate && (
+          <div className="px-5 py-4 bg-yellow-50 border-b border-yellow-100 space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Date"><Input type="date" value={update.date} onChange={e=>setUpdate(p=>({...p,date:e.target.value}))} /></Field>
+              <Field label="Type"><Select value={update.type} onChange={e=>setUpdate(p=>({...p,type:e.target.value}))}>{UPDATE_TYPES.map(t=><option key={t}>{t}</option>)}</Select></Field>
+              <Field label="Source URL (optional)"><Input value={update.url} onChange={e=>setUpdate(p=>({...p,url:e.target.value}))} placeholder="https://…" /></Field>
+            </div>
+            <Field label="Headline" required><Input value={update.title} onChange={e=>setUpdate(p=>({...p,title:e.target.value}))} placeholder="AgriTech Iowa Closes $500K Seed Round" /></Field>
+            <Field label="Details"><Textarea value={update.description} onChange={e=>setUpdate(p=>({...p,description:e.target.value}))} rows={2} /></Field>
+            <div className="flex gap-2"><Btn onClick={addUpdate}>Save</Btn><Btn variant="secondary" onClick={()=>setShowAddUpdate(false)}>Cancel</Btn></div>
+          </div>
+        )}
+        {data.updates.length === 0
+          ? <p className="text-gray-400 text-sm p-5">No updates yet. Log investments, milestones, and media coverage here.</p>
+          : <div className="divide-y divide-gray-50">
+              {data.updates.map(u => (
+                <div key={u.id} className="px-5 py-4 flex items-start gap-3">
+                  <Badge text={u.type} className={cls('flex-shrink-0 mt-0.5', updateTypeBadge(u.type))} />
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium text-gray-900">{u.title}</p>
+                      <span className="text-xs text-gray-400 flex-shrink-0">{fmt.date(u.date)}</span>
+                    </div>
+                    {u.description && <p className="text-sm text-gray-600 mt-0.5">{u.description}</p>}
+                    {u.url && <a href={u.url.startsWith('http')?u.url:`https://${u.url}`} target="_blank" className="text-xs text-blue-500 hover:underline mt-0.5 block">View Source →</a>}
+                  </div>
+                </div>
+              ))}
+            </div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── MATCHING ────────────────────────────────────────────────────────────────
+function Matching() {
+  const [startups, setStartups] = useState([]);
+  const [selectedStartup, setSelectedStartup] = useState('');
+  const [matchData, setMatchData] = useState(null);
+  const [loadingMatch, setLoadingMatch] = useState(false);
+  const [connectingId, setConnectingId] = useState(null);
+  const [noteFor, setNoteFor] = useState({});
+  const toast = useToast();
+
+  useEffect(() => { api.get('/api/startups').then(setStartups); }, []);
+
+  const runMatch = async sid => {
+    setSelectedStartup(sid); setMatchData(null);
+    if (!sid) return;
+    setLoadingMatch(true);
+    try { setMatchData(await api.get(`/api/match/${sid}`)); }
+    finally { setLoadingMatch(false); }
+  };
+
+  const connect = async mentorId => {
+    setConnectingId(mentorId);
+    try {
+      await api.post('/api/connections/create', { mentor_id: mentorId, startup_id: parseInt(selectedStartup), notes: noteFor[mentorId] || '' });
+      toast('Connection request sent! Check mentor detail to approve.', 'info');
+      runMatch(selectedStartup);
+    } catch(e) { toast('Error creating connection','error'); }
+    finally { setConnectingId(null); }
+  };
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Mentor Matching</h1>
+      <p className="text-gray-500 text-sm mb-6">Select a startup to see mentor recommendations based on their current needs. Connection requests go through JPEC for approval before the mentor is contacted.</p>
+
+      <div className="mb-6">
+        <Select value={selectedStartup} onChange={e=>runMatch(e.target.value)} className="max-w-sm text-base py-2.5">
+          <option value="">Select a startup to match…</option>
+          {startups.map(s=><option key={s.id} value={s.id}>{s.name} — {s.stage}</option>)}
+        </Select>
+      </div>
+
+      {loadingMatch && <div className="text-center py-16 text-gray-400">Finding best matches…</div>}
+
+      {matchData && (
+        <>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mb-6">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-gray-900 rounded-xl flex items-center justify-center text-xl font-bold text-[#FFCD00]">{matchData.startup.name[0]}</div>
+              <div>
+                <h2 className="font-bold text-gray-900 text-lg">{matchData.startup.name}</h2>
+                <p className="text-sm text-gray-500 mb-2">{matchData.startup.stage} · {matchData.startup.industry}</p>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Looking for help with:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {matchData.startup.needs.map(n => <Badge key={n} text={n} className="bg-blue-100 text-blue-700" />)}
+                    {matchData.startup.needs.length === 0 && <span className="text-xs text-gray-400">No needs specified — edit startup to add needs for better matching</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <h2 className="font-semibold text-gray-900 mb-3">Mentor Recommendations ({matchData.mentors.length})</h2>
+          <div className="space-y-3">
+            {matchData.mentors.map(m => (
+              <div key={m.id} className={cls('bg-white rounded-xl border shadow-sm p-5', m.already_connected ? 'border-blue-200 bg-blue-50/30' : m.match_score > 50 ? 'border-green-200' : 'border-gray-100')}>
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-[#FFCD00] rounded-xl flex items-center justify-center text-xl font-bold text-gray-900 flex-shrink-0">{m.name[0]}</div>
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between flex-wrap gap-2">
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          <h3 className="font-semibold text-gray-900">{m.name}</h3>
+                          <div className="flex items-center gap-1">
+                            <div className={cls('text-xs font-bold px-2.5 py-1 rounded-full',
+                              m.match_score >= 70 ? 'bg-green-100 text-green-700' : m.match_score >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500')}>
+                              {m.match_score}% match
+                            </div>
+                            {m.already_connected && <Badge text="Connected" className="bg-blue-100 text-blue-700" />}
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-500">{m.company} · {m.industry}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{m.hours_per_week}h/wk available · {m.active_connections} active connections · Stage pref: {m.stage_pref}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        {m.avg_rating && <div className="flex items-center gap-1 justify-end"><StarRating value={Math.round(m.avg_rating)} readonly /><span className="text-xs text-gray-500">{m.avg_rating}</span></div>}
+                        <Badge text={m.has_capacity ? '✓ Has capacity' : '⚠ Near capacity'} className={m.has_capacity ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'} />
+                      </div>
+                    </div>
+
+                    {m.matching_skills.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs text-gray-400 mb-1">Matching skills:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {m.matching_skills.map(s => <span key={s} className="text-xs bg-[#FFCD00] text-gray-900 font-medium px-2 py-0.5 rounded-full">{s}</span>)}
+                        </div>
+                      </div>
+                    )}
+
+                    {!m.already_connected && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <Input
+                          value={noteFor[m.id]||''}
+                          onChange={e=>setNoteFor(p=>({...p,[m.id]:e.target.value}))}
+                          placeholder="Add a note for this connection request (optional)"
+                          className="flex-1 text-xs"
+                        />
+                        <Btn size="sm" variant={m.match_score>=50?'primary':'secondary'} onClick={()=>connect(m.id)} disabled={connectingId===m.id}>
+                          {connectingId===m.id ? '…' : 'Request Match'}
+                        </Btn>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {!selectedStartup && !loadingMatch && (
+        <EmptyState icon="🔗" title="Select a startup to begin" desc="Choose a startup from the dropdown to see mentor recommendations based on their current needs." />
+      )}
+    </div>
+  );
+}
+
+// ─── REPORTS ─────────────────────────────────────────────────────────────────
+function Reports() {
+  const [data, setData] = useState(null);
+  const [year, setYear] = useState(new Date().getFullYear());
+  const toast = useToast();
+
+  useEffect(() => { api.get(`/api/reports?year=${year}`).then(setData).catch(()=>toast('Failed to load reports','error')); }, [year]);
+
+  if (!data) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
+
+  const totalReg = data.eventsByTier.reduce((s,r)=>s+(r.registered||0),0);
+  const totalAtt = data.eventsByTier.reduce((s,r)=>s+(r.attended||0),0);
+  const totalEvents = data.eventsByTier.reduce((s,r)=>s+(r.events||0),0);
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Annual Report</h1>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">Year:</span>
+          <Select value={year} onChange={e=>setYear(e.target.value)} className="w-28">
+            {[2026,2025,2024,2023].map(y=><option key={y}>{y}</option>)}
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <StatCard icon="📅" label="Total Events" value={totalEvents} color="blue" />
+        <StatCard icon="📝" label="Total Registered" value={totalReg} color="purple" />
+        <StatCard icon="✅" label="Total Attended" value={totalAtt} color="green" />
+        <StatCard icon="📊" label="Avg Conversion" value={fmt.pct(totalAtt, totalReg)} color="gold" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Events by Tier */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <h2 className="font-semibold text-gray-900 px-5 py-4 border-b border-gray-100">Events by Tier</h2>
+          <div className="p-5">
+            {data.eventsByTier.length === 0 ? <p className="text-gray-400 text-sm">No events for {year}.</p> : (
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs text-gray-400 uppercase">
+                  <th className="pb-3">Tier</th><th className="pb-3">Events</th><th className="pb-3">Registered</th><th className="pb-3">Attended</th><th className="pb-3">Rate</th>
+                </tr></thead>
+                <tbody className="divide-y divide-gray-50">
+                  {data.eventsByTier.map(r => (
+                    <tr key={r.tier}>
+                      <td className="py-3"><Badge text={`Tier ${r.tier}`} className={tierBadge(r.tier)} /></td>
+                      <td className="py-3 font-medium">{r.events}</td>
+                      <td className="py-3">{r.registered||0}</td>
+                      <td className="py-3">{r.attended||0}</td>
+                      <td className="py-3"><span className={cls('font-medium',(r.attended||0)/(r.registered||1)>=0.7?'text-green-600':'text-orange-500')}>{fmt.pct(r.attended||0, r.registered||0)}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* Events by Type */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <h2 className="font-semibold text-gray-900 px-5 py-4 border-b border-gray-100">Events by Type</h2>
+          <div className="p-5 space-y-3">
+            {data.eventsByType.length === 0 ? <p className="text-gray-400 text-sm">No events for {year}.</p> : data.eventsByType.map(r => (
+              <div key={r.type} className="flex items-center gap-3">
+                <span className="text-sm text-gray-700 w-40 flex-shrink-0">{r.type}</span>
+                <div className="flex-1 bg-gray-100 rounded-full h-2">
+                  <div className="bg-[#FFCD00] h-2 rounded-full" style={{width:`${Math.round(r.count/totalEvents*100)}%`}} />
+                </div>
+                <span className="text-sm font-medium text-gray-900 w-8 text-right">{r.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Attendees by Affiliation */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <h2 className="font-semibold text-gray-900 px-5 py-4 border-b border-gray-100">Attendees by Affiliation</h2>
+          <div className="p-5">
+            {data.attendeesByAffiliation.length === 0 ? <p className="text-gray-400 text-sm">No data.</p> : (
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs text-gray-400 uppercase">
+                  <th className="pb-3">Affiliation</th><th className="pb-3">Registered</th><th className="pb-3">Attended</th><th className="pb-3">Rate</th>
+                </tr></thead>
+                <tbody className="divide-y divide-gray-50">
+                  {data.attendeesByAffiliation.map(r => (
+                    <tr key={r.affiliation}>
+                      <td className="py-2.5">{r.affiliation}</td>
+                      <td className="py-2.5">{r.registered}</td>
+                      <td className="py-2.5">{r.attended||0}</td>
+                      <td className="py-2.5"><span className={cls('font-medium',(r.attended||0)/(r.registered)>=0.7?'text-green-600':'text-orange-500')}>{fmt.pct(r.attended||0, r.registered)}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* Mentor Stats */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <h2 className="font-semibold text-gray-900 px-5 py-4 border-b border-gray-100">Mentor Program</h2>
+          <div className="p-5">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              {[
+                ['Active Mentors', data.mentorStats.total],
+                ['Active Connections', data.mentorStats.active_connections],
+                ['Completed Connections', data.mentorStats.completed_connections],
+                [`Interactions (${year})`, data.mentorStats.interactions_this_year],
+                ['Avg Interaction Rating', data.mentorStats.avg_rating ? `${data.mentorStats.avg_rating}/5` : '—'],
+              ].map(([l,v]) => (
+                <div key={l} className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-400">{l}</p>
+                  <p className="text-xl font-bold text-gray-900">{v}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">By Industry</p>
+            <div className="space-y-1.5">
+              {data.mentorStats.by_industry.map(r => (
+                <div key={r.industry} className="flex items-center justify-between text-sm">
+                  <span className="text-gray-700">{r.industry||'—'}</span>
+                  <div className="flex gap-3">
+                    <span className="text-gray-400">{r.mentors} mentors</span>
+                    <span className="font-medium text-gray-900">{r.connections} active</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Startup Stats */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+        <h2 className="font-semibold text-gray-900 px-5 py-4 border-b border-gray-100">Startup Ecosystem</h2>
+        <div className="p-5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            {[
+              ['Active Startups', data.startupStats.total],
+              ['Total Funding Raised', fmt.money(data.startupStats.total_funding)],
+              [`News Updates (${year})`, data.startupStats.updates_this_year],
+              [`Investments (${year})`, data.startupStats.investments_this_year],
+            ].map(([l,v]) => (
+              <div key={l} className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-400">{l}</p>
+                <p className="text-xl font-bold text-gray-900">{v}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase mb-2">By Stage</p>
+              {data.startupStats.by_stage.map(r => (
+                <div key={r.stage} className="flex items-center gap-3 mb-2">
+                  <Badge text={r.stage} className={cls('flex-shrink-0', stageColor(r.stage))} />
+                  <div className="flex-1 bg-gray-100 rounded-full h-2">
+                    <div className="bg-gray-800 h-2 rounded-full" style={{width:`${Math.round(r.count/data.startupStats.total*100)}%`}} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-900 w-4">{r.count}</span>
+                </div>
+              ))}
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase mb-2">By Industry</p>
+              {data.startupStats.by_industry.map(r => (
+                <div key={r.industry} className="flex items-center justify-between text-sm mb-1.5">
+                  <span className="text-gray-700">{r.industry||'—'}</span>
+                  <span className="font-medium text-gray-900">{r.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SETTINGS ────────────────────────────────────────────────────────────────
+function Settings() {
+  const [users, setUsers] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [nu, setNu] = useState({ name:'', email:'', password:'', role:'staff' });
+  const toast = useToast();
+
+  const load = () => api.get('/api/users').then(setUsers);
+  useEffect(load, []);
+
+  const addUser = async () => {
+    if (!nu.name||!nu.email||!nu.password) return toast('All fields required','error');
+    const r = await api.post('/api/users', nu);
+    if (r.error) return toast(r.error,'error');
+    toast('User created'); setShowAdd(false); setNu({ name:'', email:'', password:'', role:'staff' }); load();
+  };
+
+  const deleteUser = async id => {
+    if (!confirm('Delete this user?')) return;
+    await api.del(`/api/users/${id}`);
+    toast('User deleted'); load();
+  };
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings — Team Access</h1>
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">JPEC Staff Accounts</h2>
+          <Btn size="sm" onClick={()=>setShowAdd(p=>!p)}>+ Add User</Btn>
+        </div>
+        {showAdd && (
+          <div className="px-5 py-4 bg-yellow-50 border-b border-yellow-100 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Name"><Input value={nu.name} onChange={e=>setNu(p=>({...p,name:e.target.value}))} placeholder="Harry Blount" /></Field>
+              <Field label="Email"><Input type="email" value={nu.email} onChange={e=>setNu(p=>({...p,email:e.target.value}))} placeholder="harry@jpec.uiowa.edu" /></Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Password"><Input type="password" value={nu.password} onChange={e=>setNu(p=>({...p,password:e.target.value}))} placeholder="Set a password" /></Field>
+              <Field label="Role">
+                <Select value={nu.role} onChange={e=>setNu(p=>({...p,role:e.target.value}))}>
+                  <option value="staff">Staff</option>
+                  <option value="admin">Admin</option>
+                </Select>
+              </Field>
+            </div>
+            <div className="flex gap-2"><Btn onClick={addUser}>Create Account</Btn><Btn variant="secondary" onClick={()=>setShowAdd(false)}>Cancel</Btn></div>
+          </div>
+        )}
+        <div className="divide-y divide-gray-50">
+          {users.map(u => (
+            <div key={u.id} className="px-5 py-4 flex items-center gap-3">
+              <div className="w-9 h-9 bg-[#FFCD00] rounded-full flex items-center justify-center font-bold text-sm text-gray-900">{u.name[0]}</div>
+              <div className="flex-1">
+                <p className="font-medium text-gray-900">{u.name}</p>
+                <p className="text-sm text-gray-500">{u.email}</p>
+              </div>
+              <Badge text={u.role} className={u.role==='admin' ? 'bg-[#FFCD00] text-gray-900' : 'bg-gray-100 text-gray-600'} />
+              <Btn size="sm" variant="ghost" onClick={()=>deleteUser(u.id)} className="text-red-400 hover:text-red-600">Delete</Btn>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-xl p-5">
+        <h3 className="font-semibold text-gray-900 mb-1">Default Credentials</h3>
+        <p className="text-sm text-gray-600">The default admin account is <code className="bg-white px-1.5 py-0.5 rounded border border-gray-200">admin@jpec.uiowa.edu</code> with password <code className="bg-white px-1.5 py-0.5 rounded border border-gray-200">jpec2026</code>. Change this password after your first login.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── APP ROOT ─────────────────────────────────────────────────────────────────
+function App() {
+  const [user, setUser] = useState(null);
+  const [checking, setChecking] = useState(true);
+  const [page, setPage] = useState('dashboard');
+
+  useEffect(() => {
+    fetch('/api/me').then(r => r.ok ? r.json() : null).then(u => { setUser(u); setChecking(false); });
+  }, []);
+
+  const logout = async () => {
+    await api.post('/api/logout', {});
+    setUser(null);
+  };
+
+  if (checking) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white text-sm">Loading…</div>;
+  if (!user) return <Login onLogin={setUser} />;
+
+  return (
+    <ToastProvider>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar page={page} setPage={setPage} user={user} onLogout={logout} />
+        <main className="flex-1 overflow-y-auto bg-gray-50">
+          {page === 'dashboard' && <Dashboard setPage={setPage} />}
+          {page === 'events' && <Events />}
+          {page === 'mentors' && <Mentors />}
+          {page === 'startups' && <Startups />}
+          {page === 'match' && <Matching />}
+          {page === 'reports' && <Reports />}
+          {page === 'settings' && <Settings />}
+        </main>
+      </div>
+    </ToastProvider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -706,6 +706,142 @@ app.get('/api/reports', auth, (req, res) => {
   });
 });
 
+// ─── EXPORT (CSV) ─────────────────────────────────────────────────────────────
+function toCsv(rows, columns) {
+  if (!rows.length) return columns.join(',') + '\n';
+  const header = columns.join(',');
+  const lines = rows.map(r => columns.map(c => {
+    let v = r[c] != null ? String(r[c]) : '';
+    if (v.includes(',') || v.includes('"') || v.includes('\n')) v = '"' + v.replace(/"/g, '""') + '"';
+    return v;
+  }).join(','));
+  return header + '\n' + lines.join('\n') + '\n';
+}
+
+app.get('/api/export/:type', auth, (req, res) => {
+  const t = req.params.type;
+  let csv = '';
+  let filename = '';
+  if (t === 'events') {
+    const rows = dbAll('SELECT id,name,date,type,tier,location,description FROM events ORDER BY date DESC', []);
+    csv = toCsv(rows, ['id','name','date','type','tier','location','description']);
+    filename = 'jpec_events.csv';
+  } else if (t === 'mentors') {
+    const rows = dbAll('SELECT id,name,email,phone,company,title,industry,skills,bio,capacity,active FROM mentors ORDER BY name', []);
+    csv = toCsv(rows, ['id','name','email','phone','company','title','industry','skills','bio','capacity','active']);
+    filename = 'jpec_mentors.csv';
+  } else if (t === 'startups') {
+    const rows = dbAll('SELECT id,name,description,industry,stage,founded,website,account_manager,funding,employees,active FROM startups ORDER BY name', []);
+    csv = toCsv(rows, ['id','name','description','industry','stage','founded','website','account_manager','funding','employees','active']);
+    filename = 'jpec_startups.csv';
+  } else if (t === 'attendees') {
+    const rows = dbAll('SELECT a.id,e.name as event_name,e.date as event_date,a.name,a.email,a.affiliation,a.registered,a.attended FROM attendees a JOIN events e ON e.id=a.event_id ORDER BY e.date DESC, a.name', []);
+    csv = toCsv(rows, ['id','event_name','event_date','name','email','affiliation','registered','attended']);
+    filename = 'jpec_attendees.csv';
+  } else if (t === 'interactions') {
+    const rows = dbAll(`SELECT si.id, s.name as startup_name, si.contact_name, si.date, si.type, si.description, u.name as logged_by, e.name as event_name
+      FROM startup_interactions si JOIN startups s ON s.id=si.startup_id LEFT JOIN users u ON u.id=si.user_id LEFT JOIN events e ON e.id=si.event_id ORDER BY si.date DESC`, []);
+    csv = toCsv(rows, ['id','startup_name','contact_name','date','type','description','logged_by','event_name']);
+    filename = 'jpec_interactions.csv';
+  } else if (t === 'employee_snapshots') {
+    const rows = dbAll('SELECT es.id, s.name as startup_name, es.date, es.employee_count, es.jobs_created, es.notes FROM employee_snapshots es JOIN startups s ON s.id=es.startup_id ORDER BY es.date DESC', []);
+    csv = toCsv(rows, ['id','startup_name','date','employee_count','jobs_created','notes']);
+    filename = 'jpec_employee_snapshots.csv';
+  } else if (t === 'founders') {
+    const rows = dbAll('SELECT f.id, s.name as startup_name, f.name, f.email, f.phone, f.role, f.bio, f.linkedin FROM founders f JOIN startups s ON s.id=f.startup_id ORDER BY s.name, f.name', []);
+    csv = toCsv(rows, ['id','startup_name','name','email','phone','role','bio','linkedin']);
+    filename = 'jpec_founders.csv';
+  } else {
+    return res.status(400).json({ error: 'Unknown export type' });
+  }
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(csv);
+});
+
+// ─── IMPORT (CSV) ─────────────────────────────────────────────────────────────
+function parseCsv(text) {
+  const lines = [];
+  let current = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i+1] === '"') { field += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { field += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { current.push(field); field = ''; }
+      else if (ch === '\n' || (ch === '\r' && text[i+1] === '\n')) {
+        current.push(field); field = '';
+        if (current.some(c => c.trim())) lines.push(current);
+        current = [];
+        if (ch === '\r') i++;
+      } else { field += ch; }
+    }
+  }
+  if (field || current.length) { current.push(field); if (current.some(c => c.trim())) lines.push(current); }
+  if (lines.length < 2) return [];
+  const headers = lines[0].map(h => h.trim().toLowerCase());
+  return lines.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = (row[i] || '').trim(); });
+    return obj;
+  });
+}
+
+app.post('/api/import/:type', auth, express.text({ type: '*/*', limit: '10mb' }), (req, res) => {
+  const t = req.params.type;
+  const rows = parseCsv(typeof req.body === 'string' ? req.body : '');
+  if (!rows.length) return res.status(400).json({ error: 'No valid data found in CSV' });
+  let imported = 0;
+  try {
+    if (t === 'events') {
+      rows.forEach(r => {
+        if (!r.name) return;
+        dbRun('INSERT INTO events (name,date,type,tier,description,location) VALUES (?,?,?,?,?,?)',
+          [r.name, r.date||'', r.type||'Workshop', parseInt(r.tier)||3, r.description||'', r.location||'']);
+        imported++;
+      });
+    } else if (t === 'mentors') {
+      rows.forEach(r => {
+        if (!r.name) return;
+        const skills = r.skills || '[]';
+        const skillsJson = skills.startsWith('[') ? skills : JSON.stringify(skills.split(';').map(s=>s.trim()).filter(Boolean));
+        dbRun('INSERT INTO mentors (name,email,phone,company,title,industry,skills,bio,capacity,active) VALUES (?,?,?,?,?,?,?,?,?,?)',
+          [r.name, r.email||'', r.phone||'', r.company||'', r.title||'', r.industry||'', skillsJson, r.bio||'', parseInt(r.capacity)||3, r.active !== '0' ? 1 : 0]);
+        imported++;
+      });
+    } else if (t === 'startups') {
+      rows.forEach(r => {
+        if (!r.name) return;
+        const needs = r.needs || '[]';
+        const needsJson = needs.startsWith('[') ? needs : JSON.stringify(needs.split(';').map(s=>s.trim()).filter(Boolean));
+        dbRun('INSERT INTO startups (name,description,industry,stage,founded,website,account_manager,needs,funding,employees,active) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+          [r.name, r.description||'', r.industry||'', r.stage||'Idea', r.founded||'', r.website||'', r.account_manager||'', needsJson, parseFloat(r.funding)||0, parseInt(r.employees)||0, r.active !== '0' ? 1 : 0]);
+        imported++;
+      });
+    } else if (t === 'attendees') {
+      rows.forEach(r => {
+        if (!r.name || !r.event_name) return;
+        const event = dbGet('SELECT id FROM events WHERE LOWER(name)=LOWER(?)', [r.event_name]);
+        if (!event) return;
+        dbRun('INSERT INTO attendees (event_id,name,email,affiliation,registered,attended) VALUES (?,?,?,?,?,?)',
+          [event.id, r.name, r.email||'', r.affiliation||'Other', r.registered !== '0' ? 1 : 0, r.attended === '1' ? 1 : 0]);
+        imported++;
+      });
+    } else {
+      return res.status(400).json({ error: 'Unknown import type' });
+    }
+    saveDb();
+    res.json({ imported, total: rows.length });
+  } catch(e) {
+    res.status(500).json({ error: 'Import failed: ' + e.message });
+  }
+});
+
 // ─── SEARCH ───────────────────────────────────────────────────────────────────
 app.get('/api/search', auth, (req, res) => {
   const q = req.query.q || '';

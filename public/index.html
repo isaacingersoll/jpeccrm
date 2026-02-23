@@ -549,7 +549,7 @@ function EventDetail({ eventId, onBack }) {
   const toast = useToast();
 
   const load = () => api.get(`/api/events/${eventId}`).then(setData);
-  useEffect(load, [eventId]);
+  useEffect(() => { load(); }, [eventId]);
   if (!data) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
 
   const addAttendee = async () => {
@@ -1048,7 +1048,7 @@ function StartupDetail({ startupId, onBack }) {
   const toast = useToast();
 
   const load = () => api.get(`/api/startups/${startupId}`).then(setData);
-  useEffect(load, [startupId]);
+  useEffect(() => { load(); }, [startupId]);
   if (!data) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
 
   const addFounder = async () => {
@@ -1539,7 +1539,7 @@ function Settings() {
   const toast = useToast();
 
   const load = () => api.get('/api/users').then(setUsers);
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
 
   const addUser = async () => {
     if (!nu.name||!nu.email||!nu.password) return toast('All fields required','error');

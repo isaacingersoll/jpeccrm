@@ -177,7 +177,29 @@ async function initDb() {
       mentor_rating INTEGER,
       created_at TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS startup_interactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      startup_id INTEGER NOT NULL REFERENCES startups(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id),
+      contact_name TEXT DEFAULT '',
+      date TEXT NOT NULL,
+      type TEXT DEFAULT 'Call',
+      description TEXT DEFAULT '',
+      event_id INTEGER REFERENCES events(id),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS employee_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      startup_id INTEGER NOT NULL REFERENCES startups(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,
+      employee_count INTEGER DEFAULT 0,
+      jobs_created INTEGER DEFAULT 0,
+      notes TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
+
+  try { db.run('ALTER TABLE startups ADD COLUMN employees INTEGER DEFAULT 0'); } catch(e) {}
 
   // Seed data if empty
   const userCount = dbGet('SELECT COUNT(*) as c FROM users', []);
@@ -469,12 +491,25 @@ app.post('/api/startups', auth, (req, res) => {
 });
 
 app.get('/api/startups/:id', auth, (req, res) => {
-  const startup = dbGet('SELECT * FROM startups WHERE id=?', [parseInt(req.params.id)]);
+  const sid = parseInt(req.params.id);
+  const startup = dbGet('SELECT * FROM startups WHERE id=?', [sid]);
   if (!startup) return res.status(404).json({ error: 'Not found' });
-  const founders = dbAll('SELECT * FROM founders WHERE startup_id=?', [parseInt(req.params.id)]);
-  const updates = dbAll('SELECT * FROM startup_updates WHERE startup_id=? ORDER BY date DESC', [parseInt(req.params.id)]);
-  const connections = dbAll('SELECT c.*,m.name as mentor_name,m.industry as mentor_industry,m.skills as mentor_skills,m.email as mentor_email FROM connections c JOIN mentors m ON m.id=c.mentor_id WHERE c.startup_id=? ORDER BY c.created_at DESC', [parseInt(req.params.id)]);
-  res.json({ ...parseNeeds(startup), founders, updates, connections: connections.map(c => ({ ...c, mentor_skills: JSON.parse(c.mentor_skills || '[]') })) });
+  const founders = dbAll('SELECT * FROM founders WHERE startup_id=?', [sid]);
+  const updates = dbAll('SELECT * FROM startup_updates WHERE startup_id=? ORDER BY date DESC', [sid]);
+  const connections = dbAll('SELECT c.*,m.name as mentor_name,m.industry as mentor_industry,m.skills as mentor_skills,m.email as mentor_email FROM connections c JOIN mentors m ON m.id=c.mentor_id WHERE c.startup_id=? ORDER BY c.created_at DESC', [sid]);
+  const interactions = dbAll(`SELECT si.*, u.name as user_name, e.name as event_name
+    FROM startup_interactions si LEFT JOIN users u ON u.id=si.user_id LEFT JOIN events e ON e.id=si.event_id
+    WHERE si.startup_id=? ORDER BY si.date DESC`, [sid]);
+  const employeeHistory = dbAll('SELECT * FROM employee_snapshots WHERE startup_id=? ORDER BY date DESC', [sid]);
+  const founderEmails = founders.filter(f => f.email).map(f => f.email.toLowerCase());
+  let eventAttendance = [];
+  if (founderEmails.length > 0) {
+    const allAtt = dbAll(`SELECT a.*, e.name as event_name, e.date as event_date, e.type as event_type, e.tier as event_tier
+      FROM attendees a JOIN events e ON e.id=a.event_id ORDER BY e.date DESC`);
+    eventAttendance = allAtt.filter(a => a.email && founderEmails.includes(a.email.toLowerCase()));
+  }
+  res.json({ ...parseNeeds(startup), founders, updates, interactions, employeeHistory, eventAttendance,
+    connections: connections.map(c => ({ ...c, mentor_skills: JSON.parse(c.mentor_skills || '[]') })) });
 });
 
 app.put('/api/startups/:id', auth, (req, res) => {
@@ -498,6 +533,57 @@ app.post('/api/startups/:id/updates', auth, (req, res) => {
   const { date, type = 'Milestone', title, description = '', url = '' } = req.body;
   const r = dbRun('INSERT INTO startup_updates (startup_id,date,type,title,description,url) VALUES (?,?,?,?,?,?)', [parseInt(req.params.id), date, type, title, description, url]);
   res.json({ id: r.lastInsertRowid });
+});
+
+// ─── STARTUP INTERACTIONS (Admin CRM) ─────────────────────────────────────────
+app.get('/api/startups/:id/interactions', auth, (req, res) => {
+  const interactions = dbAll(`SELECT si.*, u.name as user_name, e.name as event_name
+    FROM startup_interactions si
+    LEFT JOIN users u ON u.id=si.user_id
+    LEFT JOIN events e ON e.id=si.event_id
+    WHERE si.startup_id=? ORDER BY si.date DESC`, [parseInt(req.params.id)]);
+  res.json(interactions);
+});
+
+app.post('/api/startups/:id/interactions', auth, (req, res) => {
+  const { contact_name = '', date, type = 'Call', description = '', event_id = null } = req.body;
+  const r = dbRun('INSERT INTO startup_interactions (startup_id,user_id,contact_name,date,type,description,event_id) VALUES (?,?,?,?,?,?,?)',
+    [parseInt(req.params.id), req.session.userId, contact_name, date, type, description, event_id || null]);
+  res.json({ id: r.lastInsertRowid });
+});
+
+app.delete('/api/startup-interactions/:id', auth, (req, res) => {
+  dbRun('DELETE FROM startup_interactions WHERE id=?', [parseInt(req.params.id)]);
+  res.json({ ok: true });
+});
+
+// ─── EMPLOYEE SNAPSHOTS (BOR Reporting) ───────────────────────────────────────
+app.get('/api/startups/:id/employees', auth, (req, res) => {
+  res.json(dbAll('SELECT * FROM employee_snapshots WHERE startup_id=? ORDER BY date DESC', [parseInt(req.params.id)]));
+});
+
+app.post('/api/startups/:id/employees', auth, (req, res) => {
+  const { date, employee_count = 0, jobs_created = 0, notes = '' } = req.body;
+  const r = dbRun('INSERT INTO employee_snapshots (startup_id,date,employee_count,jobs_created,notes) VALUES (?,?,?,?,?)',
+    [parseInt(req.params.id), date, employee_count, jobs_created, notes]);
+  dbRun('UPDATE startups SET employees=? WHERE id=?', [employee_count, parseInt(req.params.id)]);
+  res.json({ id: r.lastInsertRowid });
+});
+
+app.delete('/api/employee-snapshots/:id', auth, (req, res) => {
+  dbRun('DELETE FROM employee_snapshots WHERE id=?', [parseInt(req.params.id)]);
+  res.json({ ok: true });
+});
+
+// ─── EVENT ATTENDANCE BY STARTUP ──────────────────────────────────────────────
+app.get('/api/startups/:id/event-attendance', auth, (req, res) => {
+  const founders = dbAll('SELECT email FROM founders WHERE startup_id=? AND email != ""', [parseInt(req.params.id)]);
+  if (founders.length === 0) return res.json([]);
+  const emails = founders.map(f => f.email.toLowerCase());
+  const allAttendees = dbAll(`SELECT a.*, e.name as event_name, e.date as event_date, e.type as event_type, e.tier as event_tier
+    FROM attendees a JOIN events e ON e.id=a.event_id ORDER BY e.date DESC`);
+  const matched = allAttendees.filter(a => a.email && emails.includes(a.email.toLowerCase()));
+  res.json(matched);
 });
 
 // ─── CONNECTIONS ──────────────────────────────────────────────────────────────
@@ -566,6 +652,14 @@ app.get('/api/reports', auth, (req, res) => {
       total_funding: (dbGet('SELECT SUM(funding) as total FROM startups WHERE active=1', []) || {total:0}).total || 0,
       updates_this_year: (dbGet(`SELECT COUNT(*) as c FROM startup_updates WHERE strftime('%Y',date)=?`, [y]) || {c:0}).c,
       investments_this_year: (dbGet(`SELECT COUNT(*) as c FROM startup_updates WHERE type='Investment' AND strftime('%Y',date)=?`, [y]) || {c:0}).c,
+    },
+    borMetrics: {
+      total_companies: (dbGet('SELECT COUNT(*) as c FROM startups WHERE active=1', []) || {c:0}).c,
+      total_employees: (dbGet('SELECT COALESCE(SUM(employees),0) as c FROM startups WHERE active=1', []) || {c:0}).c,
+      total_jobs_created: (dbGet('SELECT COALESCE(SUM(jobs_created),0) as c FROM employee_snapshots es WHERE es.id IN (SELECT MAX(e2.id) FROM employee_snapshots e2 GROUP BY e2.startup_id)', []) || {c:0}).c,
+      snapshots_this_year: dbAll(`SELECT es.*, s.name as startup_name FROM employee_snapshots es JOIN startups s ON s.id=es.startup_id WHERE strftime('%Y',es.date)=? ORDER BY es.date DESC`, [y]),
+      interactions_this_year: (dbGet(`SELECT COUNT(*) as c FROM startup_interactions WHERE strftime('%Y',date)=?`, [y]) || {c:0}).c,
+      startups_with_employees: dbAll('SELECT s.name, s.employees, s.industry, s.stage FROM startups s WHERE s.active=1 AND s.employees > 0 ORDER BY s.employees DESC', []),
     },
   });
 });

@@ -1043,12 +1043,17 @@ function StartupDetail({ startupId, onBack }) {
   const [data, setData] = useState(null);
   const [showAddFounder, setShowAddFounder] = useState(false);
   const [showAddUpdate, setShowAddUpdate] = useState(false);
+  const [showAddInteraction, setShowAddInteraction] = useState(false);
+  const [showAddEmployee, setShowAddEmployee] = useState(false);
+  const [events, setEvents] = useState([]);
+  const [interaction, setInteraction] = useState({ contact_name:'', date:new Date().toISOString().slice(0,10), type:'Call', description:'', event_id:'' });
+  const [empRecord, setEmpRecord] = useState({ date: new Date().toISOString().slice(0,10), employee_count: 0, jobs_created: 0, notes: '' });
   const [founder, setFounder] = useState({ name:'', email:'', phone:'', bio:'', linkedin:'', role:'Co-Founder' });
   const [update, setUpdate] = useState({ date:new Date().toISOString().slice(0,10), type:'Milestone', title:'', description:'', url:'' });
   const toast = useToast();
 
   const load = () => api.get(`/api/startups/${startupId}`).then(setData);
-  useEffect(() => { load(); }, [startupId]);
+  useEffect(() => { load(); api.get('/api/events').then(e => setEvents(e)); }, [startupId]);
   if (!data) return <div className="flex items-center justify-center h-64 text-gray-400">Loading…</div>;
 
   const addFounder = async () => {
@@ -1067,6 +1072,28 @@ function StartupDetail({ startupId, onBack }) {
     if (!update.title.trim()) return toast('Title required','error');
     await api.post(`/api/startups/${startupId}/updates`, update);
     toast('Update added'); setShowAddUpdate(false); setUpdate(p=>({...p, title:'', description:'', url:''})); load();
+  };
+
+  const addInteraction = async () => {
+    await api.post(`/api/startups/${startupId}/interactions`, { ...interaction, event_id: interaction.event_id || null });
+    toast('Interaction logged'); setShowAddInteraction(false); setInteraction({ contact_name:'', date:new Date().toISOString().slice(0,10), type:'Call', description:'', event_id:'' }); load();
+  };
+
+  const removeInteraction = async id => {
+    if (!confirm('Delete this interaction?')) return;
+    await api.del(`/api/startup-interactions/${id}`);
+    toast('Interaction removed'); load();
+  };
+
+  const addEmployee = async () => {
+    await api.post(`/api/startups/${startupId}/employees`, empRecord);
+    toast('Employee snapshot added'); setShowAddEmployee(false); setEmpRecord({ date: new Date().toISOString().slice(0,10), employee_count: 0, jobs_created: 0, notes: '' }); load();
+  };
+
+  const removeEmployee = async id => {
+    if (!confirm('Delete this snapshot?')) return;
+    await api.del(`/api/employee-snapshots/${id}`);
+    toast('Snapshot removed'); load();
   };
 
   const updateConn = async (cid, status) => {
@@ -1180,6 +1207,112 @@ function StartupDetail({ startupId, onBack }) {
             {data.connections.length === 0 && <p className="text-gray-400 text-sm px-5 py-4">No mentor connections yet. Use the Match page to find mentors.</p>}
           </div>
         </div>
+      </div>
+
+      {/* Admin Outreach Log */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-5" data-testid="section-interaction-log">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">Admin Outreach Log ({(data.interactions||[]).length})</h2>
+          <Btn size="sm" onClick={()=>setShowAddInteraction(p=>!p)} data-testid="button-add-interaction">+ Log Interaction</Btn>
+        </div>
+        {showAddInteraction && (
+          <div className="px-5 py-4 bg-yellow-50 border-b border-yellow-100 space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Date"><Input type="date" value={interaction.date} onChange={e=>setInteraction(p=>({...p,date:e.target.value}))} data-testid="input-interaction-date" /></Field>
+              <Field label="Type">
+                <Select value={interaction.type} onChange={e=>setInteraction(p=>({...p,type:e.target.value}))} data-testid="select-interaction-type">
+                  {['Call','Email','Meeting','Event Encounter','Note','Other'].map(t=><option key={t}>{t}</option>)}
+                </Select>
+              </Field>
+              <Field label="Contact Name"><Input value={interaction.contact_name} onChange={e=>setInteraction(p=>({...p,contact_name:e.target.value}))} placeholder="Person at the venture" data-testid="input-interaction-contact" /></Field>
+            </div>
+            <Field label="Related Event (optional)">
+              <Select value={interaction.event_id} onChange={e=>setInteraction(p=>({...p,event_id:e.target.value}))} data-testid="select-interaction-event">
+                <option value="">None</option>
+                {events.map(ev=><option key={ev.id} value={ev.id}>{ev.name} ({fmt.date(ev.date)})</option>)}
+              </Select>
+            </Field>
+            <Field label="Notes / Description"><Textarea value={interaction.description} onChange={e=>setInteraction(p=>({...p,description:e.target.value}))} rows={2} placeholder="What was discussed?" data-testid="textarea-interaction-description" /></Field>
+            <div className="flex gap-2"><Btn onClick={addInteraction} data-testid="button-save-interaction">Save</Btn><Btn variant="secondary" onClick={()=>setShowAddInteraction(false)} data-testid="button-cancel-interaction">Cancel</Btn></div>
+          </div>
+        )}
+        {(data.interactions||[]).length === 0
+          ? <p className="text-gray-400 text-sm p-5">No admin interactions logged yet. Track calls, emails, and meetings with this venture.</p>
+          : <div className="divide-y divide-gray-50">
+              {(data.interactions||[]).map(ix => (
+                <div key={ix.id} className="px-5 py-4 flex items-start gap-3" data-testid={`interaction-item-${ix.id}`}>
+                  <Badge text={ix.type} className={cls('flex-shrink-0 mt-0.5', ix.type==='Call'?'bg-blue-100 text-blue-700':ix.type==='Email'?'bg-purple-100 text-purple-700':ix.type==='Meeting'?'bg-green-100 text-green-700':ix.type==='Event Encounter'?'bg-amber-100 text-amber-700':'bg-gray-100 text-gray-600')} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      {ix.contact_name && <span className="text-sm font-medium text-gray-900">{ix.contact_name}</span>}
+                      <span className="text-xs text-gray-400">{fmt.date(ix.date)}</span>
+                      {ix.user_name && <span className="text-xs text-gray-400">by {ix.user_name}</span>}
+                      {ix.event_name && <Badge text={ix.event_name} className="bg-[#FFCD00] text-gray-900" />}
+                    </div>
+                    {ix.description && <p className="text-sm text-gray-600">{ix.description}</p>}
+                  </div>
+                  <Btn size="sm" variant="ghost" onClick={()=>removeInteraction(ix.id)} className="text-red-400 hover:text-red-600 flex-shrink-0" data-testid={`button-delete-interaction-${ix.id}`}>×</Btn>
+                </div>
+              ))}
+            </div>}
+      </div>
+
+      {/* Event Attendance */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-5" data-testid="section-event-attendance">
+        <h2 className="font-semibold text-gray-900 px-5 py-4 border-b border-gray-100">Event Attendance ({(data.eventAttendance||[]).length})</h2>
+        {(data.eventAttendance||[]).length === 0
+          ? <p className="text-gray-400 text-sm p-5">No event attendance records found. This tracks when founders/employees attend JPEC events.</p>
+          : <div className="divide-y divide-gray-50">
+              {(data.eventAttendance||[]).map((ea, i) => (
+                <div key={i} className="px-5 py-3 flex items-center gap-3" data-testid={`attendance-item-${i}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <span className="text-sm font-medium text-gray-900">{ea.event_name}</span>
+                      <Badge text={ea.event_type||ea.type||'Event'} className="bg-gray-100 text-gray-600" />
+                      {ea.tier && <Badge text={`Tier ${ea.tier}`} className={tierBadge(ea.tier)} />}
+                    </div>
+                    <p className="text-xs text-gray-500">{ea.attendee_name||ea.name} {ea.attendee_email||ea.email ? `(${ea.attendee_email||ea.email})` : ''} · {fmt.date(ea.event_date||ea.date)}</p>
+                  </div>
+                  <span className={cls('text-lg', ea.attended ? 'text-green-500' : 'text-red-400')}>{ea.attended ? '✓' : '✗'}</span>
+                </div>
+              ))}
+            </div>}
+      </div>
+
+      {/* Employee / Jobs Tracking */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm mb-5" data-testid="section-employee-tracking">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="font-semibold text-gray-900">Employment & Jobs ({(data.employeeHistory||[]).length})</h2>
+          <Btn size="sm" onClick={()=>setShowAddEmployee(p=>!p)} data-testid="button-add-employee">+ Add Snapshot</Btn>
+        </div>
+        {showAddEmployee && (
+          <div className="px-5 py-4 bg-yellow-50 border-b border-yellow-100 space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Date"><Input type="date" value={empRecord.date} onChange={e=>setEmpRecord(p=>({...p,date:e.target.value}))} data-testid="input-employee-date" /></Field>
+              <Field label="Current Employee Count"><Input type="number" min="0" value={empRecord.employee_count} onChange={e=>setEmpRecord(p=>({...p,employee_count:parseInt(e.target.value)||0}))} data-testid="input-employee-count" /></Field>
+              <Field label="New Jobs Created This Period"><Input type="number" min="0" value={empRecord.jobs_created} onChange={e=>setEmpRecord(p=>({...p,jobs_created:parseInt(e.target.value)||0}))} data-testid="input-jobs-created" /></Field>
+            </div>
+            <Field label="Notes"><Textarea value={empRecord.notes} onChange={e=>setEmpRecord(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Any context about this snapshot" data-testid="textarea-employee-notes" /></Field>
+            <div className="flex gap-2"><Btn onClick={addEmployee} data-testid="button-save-employee">Save</Btn><Btn variant="secondary" onClick={()=>setShowAddEmployee(false)} data-testid="button-cancel-employee">Cancel</Btn></div>
+          </div>
+        )}
+        {(data.employeeHistory||[]).length === 0
+          ? <p className="text-gray-400 text-sm p-5">No employment snapshots yet. Track employee counts and jobs created for BOR reporting.</p>
+          : <div className="divide-y divide-gray-50">
+              {(data.employeeHistory||[]).map(eh => (
+                <div key={eh.id} className="px-5 py-3 flex items-center gap-3" data-testid={`employee-item-${eh.id}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-gray-900">{fmt.date(eh.date)}</span>
+                      <Badge text={`${eh.employee_count} employees`} className="bg-blue-100 text-blue-700" />
+                      <Badge text={`${eh.jobs_created} new jobs`} className="bg-green-100 text-green-700" />
+                    </div>
+                    {eh.notes && <p className="text-xs text-gray-500 mt-0.5">{eh.notes}</p>}
+                  </div>
+                  <Btn size="sm" variant="ghost" onClick={()=>removeEmployee(eh.id)} className="text-red-400 hover:text-red-600 flex-shrink-0" data-testid={`button-delete-employee-${eh.id}`}>×</Btn>
+                </div>
+              ))}
+            </div>}
       </div>
 
       {/* Updates / News */}
@@ -1527,6 +1660,41 @@ function Reports() {
           </div>
         </div>
       </div>
+
+      {/* BOR Economic Impact */}
+      {data.borMetrics && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm mt-6" data-testid="section-bor-metrics">
+          <h2 className="font-semibold text-gray-900 px-5 py-4 border-b border-gray-100">Board of Regents — Economic Impact</h2>
+          <div className="p-5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+              <StatCard label="Total Companies" value={data.borMetrics.total_companies} color="blue" />
+              <StatCard label="Total Employees" value={data.borMetrics.total_employees} color="green" />
+              <StatCard label="Total Jobs Created" value={data.borMetrics.total_jobs_created} color="purple" />
+              <StatCard label="Admin Interactions This Year" value={data.borMetrics.interactions_this_year} color="gold" />
+            </div>
+            {data.borMetrics.startups_with_employees && data.borMetrics.startups_with_employees.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Companies with Employee Data</p>
+                <table className="w-full text-sm" data-testid="table-bor-startups">
+                  <thead><tr className="text-left text-xs text-gray-400 uppercase">
+                    <th className="pb-3">Startup</th><th className="pb-3">Employees</th><th className="pb-3">Industry</th><th className="pb-3">Stage</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {data.borMetrics.startups_with_employees.map(s => (
+                      <tr key={s.name} data-testid={`bor-startup-row-${s.name}`}>
+                        <td className="py-2.5 font-medium text-gray-900">{s.name}</td>
+                        <td className="py-2.5">{s.employees}</td>
+                        <td className="py-2.5">{s.industry||'—'}</td>
+                        <td className="py-2.5"><Badge text={s.stage} className={stageColor(s.stage)} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1609,7 +1777,7 @@ function App() {
   const [page, setPage] = useState('dashboard');
 
   useEffect(() => {
-    fetch('/api/me').then(r => r.ok ? r.json() : null).then(u => { setUser(u); setChecking(false); });
+    fetch('/api/me').then(r => r.ok ? r.json() : null).then(u => { setUser(u); setChecking(false); if (u && u.role !== 'admin') setPage('events'); });
   }, []);
 
   const logout = async () => {

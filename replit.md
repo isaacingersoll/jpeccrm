@@ -7,10 +7,19 @@ A custom CRM application built for the **University of Iowa John Pappajohn Entre
 Key functional areas:
 - **Events** — Registration tracking, attendance, attendee demographics, event tiers, conversion rates
 - **Mentors** — Database with skills, capacity tracking, interaction logging, star ratings
-- **Startups** — Founder profiles, news/milestone updates, account manager assignment, needs tracking
+- **Startups** — Founder profiles, news/milestone updates, account manager assignment, needs tracking, admin outreach log (CRM interactions), event attendance linkage, employee/jobs tracking for BOR reporting
 - **Matching** — Mentor-startup matching based on skill/need overlap scoring
-- **Annual Reports** — Aggregated yearly statistics
+- **Annual Reports** — Aggregated yearly statistics, Board of Regents economic impact section
 - **Settings** — User management (admin only)
+
+## Recent Changes (Feb 2026)
+- Added **Admin Outreach Log** to startup detail: track calls, emails, meetings with contact person, notes, optional event linkage
+- Added **Event Attendance** section on startup detail: shows when startup founders attended JPEC events (matched by email)
+- Added **Employment & Jobs** tracking on startup detail: record employee count and jobs created snapshots over time for longitudinal BOR reporting
+- Added **Board of Regents — Economic Impact** section to Reports page with total companies, employees, jobs created, admin interactions
+- Non-admin users now default to Events page instead of Dashboard
+- New database tables: `startup_interactions`, `employee_snapshots`
+- New column on startups: `employees` (current headcount)
 
 ## User Preferences
 

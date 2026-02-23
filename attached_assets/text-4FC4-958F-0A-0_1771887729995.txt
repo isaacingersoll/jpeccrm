@@ -1,0 +1,262 @@
+Start Time: Feb 23, 2026 at 4:37 PM
+End Time: Feb 23, 2026 at 5:00 PM
+Device Type: unknown
+
+Short Summary:
+AI-powered rapid software development
+
+Summary:
+## Summary
+
+Isaac joined a working session with colleagues Adam and Harry to build out a startup platform using AI-assisted coding. The goal is to replace their current "Startup Tree" system with a custom solution. Isaac demonstrated a V1 he had built with Adam the previous day in just 15 minutes using Claude and Replit, created from a simple voice-recorded conversation and a few files. The team discussed adding CRM-style interaction tracking, event RSVP integration, and longitudinal data reporting capabilities for a Board of Regents economic impact study. Harry was brought in to help iterate on the platform given his engineering background and prior Replit experience. Isaac emphasized how AI coding tools eliminate the traditional developer middleman, allowing for immediate "idea to output" execution.
+
+## Atmosphere
+
+Energetic, collaborative, and slightly awe-struck at the speed of AI-assisted development. The group displayed a mix of excitement about the technological possibilities and dark humor about automation making humans obsolete. There was palpable frustration with their current vendor ("the deaf guy") and enthusiasm for taking control of their own tooling.
+
+## Key Takeaways
+
+- Isaac and Adam built a functional V1 startup platform in ~15 minutes using Claude + Replit from a voice-recorded conversation
+- The team is replacing "Startup Tree" due to poor vendor responsiveness and lack of needed features
+- Harry was recruited to help iterate given his engineering background and Replit experience
+- Key features needed: admin interaction tracking (calls, emails, notes), event RSVP linkage, longitudinal job-creation metrics for Board of Regents reporting
+- Isaac demonstrated Replit's self-testing capabilities with auto-generated Loom-style videos
+- Discussion of using MCP (Model Context Protocol) servers to integrate with Salesforce, Power BI, and other platforms
+- Isaac shared his "Socratic method" approach to AI: start a conversation with Claude about what you're trying to achieve rather than engineering perfect prompts
+
+## Action Items
+
+- Harry to review the V1 platform on Replit and provide feedback
+- Adam to forward event budget spreadsheet from Patty to Isaac for platform integration
+- Isaac to implement bug fixes and feature changes based on feedback gathered during the call
+- Team to explore MCP server integrations for Salesforce and Power BI connectivity
+- Harry to research the AI tool stack discussed (Claude, Replit, MCP servers)
+
+Transcription:
+Speaker: Well, actually, no, if you're on Wall Street, because you control the markets, you like text your buddies and get you all to short something or buy something.
+Speaker: But your average Joe, it's like, why wouldn't I just let the robots do this?
+Isaac: Oh, yeah, and people are already doing this anyway.
+Isaac: I mean, the day trading, the fast trading, that's like the most simple version of that.
+Isaac: But this is like, yeah, people are definitely have got systems out there that are just like, you know, they're a step ahead and they're just breaking in cash, I'm sure.
+Speaker: He probably is.
+Speaker: And the people that are really doing it, they're not saying anything about it, you know.
+Speaker: That sounds like something he would do.
+Speaker: Sorry about that, guys.
+Speaker: Yeah.Oh my gosh.
+Isaac: What's going on, Harry?
+Speaker: How are you doing?
+Speaker: Good, good.
+Speaker: How about you?
+Speaker: Long time to see. Yeah. Good, man.
+Speaker: I just had to, like, wrestle this room away from somebody.
+Speaker: So I had to work on that for a little bit.
+Speaker: We were just talking, Iceman was just catching up on some of the cool new stuff that he's figuring out the cloud can do for him.
+Speaker: All good.
+Speaker: It's continuing to automate more and more of his job.
+Speaker: Awesome.But don't let me get a rough.
+Isaac: Yeah, we're just trying to figure out the reason for humans to exist at some point.
+Speaker: You know, that's where it's going.
+Speaker: Oh, man. Yeah.
+Speaker: And I kind of told him our issues and everything like that.
+Speaker: Why would you let these folks, you know, who have their engineering team, they're going to do all this stuff?
+Speaker: And Isaac is like, why wouldn't you just build this yourself?
+Speaker: We don't need it. Wow. No. Wow. Isaac, did you get admin privileges yet?
+Speaker: No.Or are you still in trouble there?
+Isaac: I just logged in with Adam's stuff.
+Speaker: Okay.I'm just debating.
+Speaker: Isaac's quality yesterday while we were sitting here talking to build out a V1 of it.
+Speaker: Yeah, I'm just debating, like I said, if we can build it, and I'm like, well, let's bring Harry, he's been working with them the most.
+Speaker: Like, because they've got a person, but you can see they're not even really responding to our requests.
+Speaker: Do you, Isaac?
+Speaker: They don't really care.
+Isaac: We can have a real engineer sign off or something, but no, these are real engineers at Claude that created this.
+Speaker: Versus, I mean, nothing you did yesterday required really that much engineering effort as a zero or grasp.
+Isaac: So it's insane.
+Speaker: Or yeah, I was going to say, I think we pull it up.
+Speaker: So I think you can do, you can do shared projects on Replit, can't you, Isaac?
+Isaac: Yeah, in fact, I mean, we could just take the original zip file and install it anywhere.
+Speaker: We can have a GitHub repo and yeah.
+Isaac: And obviously, at Adam, what we created was like with no lengthy crafting or anything.
+Isaac: It was, you know, let's just like see it create V1 with transcripts of our conversation and you know a couple files, you know.
+Speaker: Have you used Replit before?
+Speaker: So my goal would be, Harry, is to have you kind of take a look at it.
+Speaker: Yeah, so this one really we really just deployed it on Replit, right?
+Speaker: I can't remember if we had you on the couple things, yeah.
+Speaker: Yeah, and Isaac's got an engineering, a little bit of an engineering background.
+Isaac: I mean, you could deploy it yourself, of course, if you wanted to, but Replit is just immediately one-click.
+Speaker: He've worked with engineers for a while, and as we were kind of talking it through, I'm like, okay, we'll need somebody to kind of tweak it and do a few different things to it.
+Speaker: I love it.
+Speaker: Let's stop dealing with emailing this guy and just freaking build the thing.
+Speaker: I love that that is somehow faster now than emailing the deaf guy again.
+Speaker: It's also terrifying for the record.
+Speaker: It's just amazing to me.
+Isaac: It is.
+Isaac: That's what we were talking about before you came on.
+Speaker: It's like idea, output.
+Speaker: Like, the logical conclusion, you know, just all of the friction in the middle, almost like the game of telephone, is over.
+Speaker: You know, like, there's no need, you don't need the developer in the middle.
+Isaac: Looking for, and then me and him talked for like five or ten minutes, and I recorded it with my device.
+Isaac: So, you know, anyway.
+Isaac: So, then, and then we gave it that.
+Speaker: It was like, here's the context, build this.
+Speaker: I mean, that was the prompt.
+Speaker: We just said, fuck it, do the full thing.
+Speaker: So, this is literally like the simplest prompt you could possibly imagine.
+Speaker: You know, it's oh my gosh.
+Speaker: Okay, let me add to you something specific, though.
+Speaker: I want to know: first of all, can we look at any kind of interaction tracking you have with startups?
+Speaker: Like, if you go to startups and you look at their profile, what kind of notes can we leave as admins on a specific account?
+Speaker: This is the one bug I've seen so far.
+Speaker: But say that one more time.
+Speaker: We called them at this time.
+Speaker: So, if you click on Agritech, where can we leave internal admin-only notes on Outreach so that we can measure, you know, like Salesforce?
+Speaker: We want that, but here's the thing: we want it to tie into event RSVPs.
+Speaker: So, maybe we haven't reached out to them, but in that same stream of data, we want to know, yeah, but if you go to the RSVP page, they're over here.
+Speaker: We just talk to them at this event, okay.
+Isaac: Let's go through this.
+Speaker: Okay, you know what I'm saying?
+Isaac: Yep, well, this is what we're gonna do.
+Speaker: Or we talk to somebody that is registered to this as an employee at that event.
+Isaac: You keep talking, you keep saying what you want, then I'm gonna give it to Replit right here, and we're gonna make it, we're gonna change it to exactly what you want right now.
+Speaker: So, my gosh.
+Speaker: So, we want interaction tracking for admins.
+Speaker: So, whether it's email, call, whatever it may be, we want a timestamp, and then we want an area to leave some detailed notes on.
+Speaker: It's specifically what person associated with that venture we spoke to, and maybe we can leave some notes about when we spoke to them. Okay.
+Isaac: So, there might be we're going to need some email integration in order to track emails or email monitoring of some kind.
+Speaker: Is that what you're saying?
+Speaker: Potentially.We could do it manually, too.
+Isaac: We don't do things manually anymore.
+Speaker: Okay.So, yeah, email integration, that is.
+Speaker: All right.
+Speaker: Yeah, yeah, it's a different mindset.
+Speaker: You've got to get away from this.
+Speaker: It's complicated.
+Speaker: Okay.Anything else on this tab that you're that you're if the interaction took place during an event that is one of ours, we want to know.
+Isaac: Anything on this dashboard that you'd like to see differently?
+Speaker: So, we want the interaction page to be traceable to the RSVP page if that is what actually occurred, if that's how we met them. Okay. Um, uh, okay, so we're back to the dashboard.
+Speaker: Because this is like where somebody can log in and see what's going on.
+Speaker: Yeah, if you're not an admin, you're probably just going to come straight up to like the events page where you'll see that kind of social media-y news feed type thing.
+Isaac: Okay.Yeah, but go ahead.
+Speaker: Sorry.Pending recent most active mentors, I think that's good.
+Isaac: Okay, pre-launched.
+Speaker: Yep.Sweet.
+Speaker: It's unbelievable.
+Speaker: I mean, this is tens of thousands of dollars of code.
+Speaker: Let me look at this.
+Speaker: Go to reports really quick.
+Speaker: How long did this take you, Isaac?
+Speaker: I told you nothing.
+Speaker: We had a total call length of one hour-ish. Yeah.
+Speaker: Yeah, 15 minutes.
+Speaker: And then now, like, with the way Replit's set up, if we make you, like, if we can put it on an account for you, Harry, like, you've worked with it before, you're just going to talk with it on the side.
+Speaker: Or Isaac thinks that talk or typing is for the ways of the past for his only voice.
+Speaker: On the mentors tab, I need to be able to do this.
+Speaker: But you should be able to talk to it about the different, like, on the mentors, just what you said.
+Speaker: And then, really, like, what the human part comes in for is just troubleshoot, like, go through, push the buttons, see if it's doing what you're hoping, see if it's crashing on certain stuff.
+Speaker: And the only reason I came up with this is, or I mentioned this to Isaac, is I don't know what we're going to get out of Startup Tree.
+Speaker: So, I have some example spreadsheets of the kinds of things that we would want people to be able to upload.
+Speaker: Beautiful.Can you send one thing?
+Speaker: One thing on the event side, this is totally superfluous.
+Speaker: I'll email it.
+Speaker: So, check this out.
+Speaker: This is low on the priority list, but it might be just, I got to get out of the easy.
+Speaker: Patty sent me, or events, she has these spreadsheets where she tracks the prices of everything for the events.
+Speaker: Easy and find it here.
+Speaker: Here we go.
+Speaker: Let me know if you can open this attachment.
+Speaker: I'm going to forward this to you, Isaac.
+Speaker: Did you email me?
+Speaker: Unless I typed it in wrong.
+Speaker: So you got okay.
+Speaker: Is it one C2L?
+Speaker: I mean, we're just going to have voice-activated blank slates that turn into whatever UI we need, basically.
+Speaker: So, this is really the end of the WIMP interface.
+Isaac: Yeah.Yeah, I mean, I could eat, I mean, I could sit here and just type all this stuff as we go, or we're just right.
+Isaac: We'll just talk about it, and then when you think you've given me all your feedback, at least at this round of feedback, then we'll just paste it all in. Say, make these changes.
+Isaac: There's a one little bug fix all to do right now. Okay.
+Speaker: Great.Okay, so I'll also throw in then I've got some more.
+Speaker: And you just verbally describe the bug, and it will root out the problem for you, huh?
+Speaker: Open Dorf.
+Speaker: Yeah.Great.
+Speaker: This is this is cool, and it's important for our purposes.
+Speaker: So, here's here.
+Speaker: One thing that we need to collect longitudinal data for is a BOR economic impact study.
+Speaker: BOR stands for Board of Regents.
+Speaker: And so they want to know everybody we've interacted with, how many jobs were created, right?
+Speaker: So that we can, pull a longitudinal metric, and say 80 jobs were created out of all the startups that we interacted with.
+Speaker: Along with that, when we're building out startup profiles, we want that kind of information on employees.
+Speaker: But zip code was pretty hard to get a handle on last time.
+Speaker: I mean, I have a ton of stuff.
+Speaker: Let's see here.
+Speaker: Sorry, I'm going.
+Speaker: Yeah, can you send me a five here?
+Speaker: Yeah, here, and I'll send you some stuff.
+Isaac: And you can see it's bug fixing right now.
+Isaac: Great.And the beautiful thing is, Adam, like you said, human needs to test stuff.
+Isaac: Yes, but Replit itself now tests, and you'll see it takes like a loom video of its own tests.
+Isaac: See, like, so it's really incredible.
+Isaac: So you really, the amount of functional testing is far less than there used to be.
+Isaac: I mean, again, it's really just like you know what you want it to do and want it to achieve and the value of it.
+Speaker: Or did it be like overcomplicated?
+Isaac: So you're like, okay, is this actually what we intended?
+Isaac: Are we missing something?
+Isaac: Okay, Isaac, I sent something your way.
+Speaker: A few different love documents.
+Speaker: Oh, this is going to be dump, all sorts of context and applications.
+Speaker: Love it.
+Speaker: They're all related to what we have to report on.
+Speaker: Boom.All right.
+Isaac: I had my guess this was in some one of the documents you sent me or something.
+Isaac: I mean, I didn't, I certainly didn't manually.
+Speaker: Yeah, Dana.
+Speaker: Oh, these might be some of your test accounts, Harry, when you were just creating accounts to try and oh, yeah, yeah.
+Speaker: I don't know who.
+Isaac: So it logged in. Look, so what, yeah, it went into Startup Book and it looked at every page.
+Isaac: So I'm sure it looked at the admin or the settings page to see who, you know, I think Blount is so to test our sign-on process and facilitation, I made like six mock emails.
+Speaker: That's funny.
+Speaker: Let me see here.
+Isaac: Is there any other information I should share and build upon what we already have here?
+Speaker: I mean, most recently, when I sent you those files, that is like the main reason we're doing Startup Tree is because we want that longitudinal data to be housed in one place.
+Speaker: Now, you tell me, Isaac, if there's any kinds of considerations here, but we have team members on Salesforce, we have team members in the Jacobson Institute that are using Power BI that will need an easy, universal language with which to upload stuff here.
+Speaker: Yeah, it's called NPC servers.
+Speaker: Yeah, I mean.
+Speaker: Yeah, I mean, guys, that was what he was talking about before you got on the phone about how he just figured out a way to automate all that.
+Speaker: Okay, you're both grunting talk to me.
+Speaker: You've worked with APIs, they're a bitch.
+Isaac: But so essentially, like, all those platforms you mentioned, they have APIs.
+Isaac: You know, like they change, they break.
+Isaac: So, an MPC server just sort of like abstracts all of that away, and you just get like a client key, a client ID, and that's pretty much it.
+Speaker: And then, you either somebody else has already built an MPC server, I'm sure, for Salesforce or any big platform.
+Speaker: If not, Claude will just build one itself, and then essentially, what that means is like that will connect it to Claude, and then that would let you or I or anyone who has access to that to just chat inside Claude, and it'll access that data.
+Speaker: And you can build recurring, you know, scripts or macros or whatever that'll just do those things on a schedule.
+Speaker: So, Claude has a skill scheduler as well.
+Speaker: What does MPC stand for?
+Speaker: Multiprocess something?
+Speaker: It basically comes with something around APIs.
+Isaac: Multi-protocol connection connector?
+Speaker: Sometimes, just like it's kind of like they speak like Spanish versus Portuguese, sometimes they don't quite connect right.
+Speaker: And this is kind of become like a universal way to do it, isn't it?
+Speaker: Okay, model context first of all.
+Speaker: Sorry.Yeah.
+Speaker: If able, I'd like to be selfish for about two minutes because, you know, to quote whoever that guy was that was speaking to the Senate before the invasion of Iraq, I do not know what I do not know.
+Isaac: I know Replit, I know this stuff, but yeah, it's really just like it's just a conversation with Claude.
+Speaker: So, can you give me a quick stack to go home and research after this call?
+Speaker: Just including this kind of stuff.
+Isaac: Like, you need to ask it the perfect thing, or you need to tell it exactly what to do in the right way.
+Speaker: So, what people have figured out is it's not really about prompt engineering.
+Speaker: Like, we're already past that stage of the models.
+Speaker: What are other people thinking about something like this?
+Isaac: And you just start this conversation and then run with it from there.
+Speaker: And then you can, of course, bring up things like, well, I need to connect data from Salesforce, Power BI, and other things, and you know, a lot of the stuff you just told me, and it's just gonna teach you everything you need to know.
+Speaker: So, that's really the fundamental mind shift.
+Isaac: That's actually what you need to do.
+Isaac: It's like the Socratic method of thinking.
+Speaker: And Claude knows everything.
+Isaac: And again, this is like quick and dirty, but like, you know, this is the worst implementation of what
+Isaac: what we're doing, right?
+
+
+Primary Location:
+Latitude: 43.03297791219067
+Longitude: -89.46493445015412
+bAddress: 1729 Wicklow Way, Madison, South West Side, WI, Dane County, 53711, United States

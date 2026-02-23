@@ -516,12 +516,24 @@ app.get('/api/startups/:id', auth, (req, res) => {
     WHERE si.startup_id=? ORDER BY si.date DESC`, [sid]);
   const employeeHistory = dbAll('SELECT * FROM employee_snapshots WHERE startup_id=? ORDER BY date DESC', [sid]);
   const founderEmails = founders.filter(f => f.email).map(f => f.email.toLowerCase());
+  const founderNames = founders.map(f => f.name.toLowerCase());
   let eventAttendance = [];
-  if (founderEmails.length > 0) {
-    const allAtt = dbAll(`SELECT a.*, e.name as event_name, e.date as event_date, e.type as event_type, e.tier as event_tier
-      FROM attendees a JOIN events e ON e.id=a.event_id ORDER BY e.date DESC`);
-    eventAttendance = allAtt.filter(a => a.email && founderEmails.includes(a.email.toLowerCase()));
-  }
+  const allAtt = dbAll(`SELECT a.*, e.name as event_name, e.date as event_date, e.type as event_type, e.tier as event_tier
+    FROM attendees a JOIN events e ON e.id=a.event_id ORDER BY e.date DESC`);
+  const seenAttIds = new Set();
+  allAtt.forEach(a => {
+    const emailMatch = a.email && founderEmails.includes(a.email.toLowerCase());
+    const nameMatch = a.name && founderNames.includes(a.name.toLowerCase());
+    if (emailMatch || nameMatch) { eventAttendance.push(a); seenAttIds.add(a.id); }
+  });
+  const encounterInteractions = interactions.filter(i => i.type === 'Event Encounter' && i.event_id && i.event_name);
+  encounterInteractions.forEach(ix => {
+    const alreadyInList = eventAttendance.some(ea => ea.event_id === ix.event_id && ea.name && ea.name.toLowerCase() === (ix.contact_name||'').toLowerCase());
+    if (!alreadyInList) {
+      const ev = dbGet('SELECT * FROM events WHERE id=?', [ix.event_id]);
+      if (ev) eventAttendance.push({ name: ix.contact_name, email: '', event_id: ix.event_id, event_name: ev.name, event_date: ev.date, event_type: ev.type, event_tier: ev.tier, attended: 1, affiliation: 'Startup Founder' });
+    }
+  });
   res.json({ ...parseNeeds(startup), founders, updates, interactions, employeeHistory, eventAttendance,
     connections: connections.map(c => ({ ...c, mentor_skills: JSON.parse(c.mentor_skills || '[]') })) });
 });
@@ -560,9 +572,25 @@ app.get('/api/startups/:id/interactions', auth, (req, res) => {
 });
 
 app.post('/api/startups/:id/interactions', auth, (req, res) => {
+  const sid = parseInt(req.params.id);
   const { contact_name = '', date, type = 'Call', description = '', event_id = null } = req.body;
   const r = dbRun('INSERT INTO startup_interactions (startup_id,user_id,contact_name,date,type,description,event_id) VALUES (?,?,?,?,?,?,?)',
-    [parseInt(req.params.id), req.session.userId, contact_name, date, type, description, event_id || null]);
+    [sid, req.session.userId, contact_name, date, type, description, event_id || null]);
+
+  if (type === 'Event Encounter' && event_id && contact_name.trim()) {
+    const founder = dbGet('SELECT * FROM founders WHERE startup_id=? AND LOWER(name)=LOWER(?)', [sid, contact_name.trim()]);
+    const email = (founder && founder.email) || '';
+    const existing = email
+      ? dbGet('SELECT id FROM attendees WHERE event_id=? AND LOWER(email)=LOWER(?)', [event_id, email])
+      : dbGet('SELECT id FROM attendees WHERE event_id=? AND LOWER(name)=LOWER(?)', [event_id, contact_name.trim()]);
+    if (!existing) {
+      dbRun('INSERT INTO attendees (event_id,name,email,affiliation,registered,attended) VALUES (?,?,?,?,1,1)',
+        [event_id, contact_name.trim(), email, 'Startup Founder']);
+    } else {
+      dbRun('UPDATE attendees SET attended=1 WHERE id=?', [existing.id]);
+    }
+  }
+
   res.json({ id: r.lastInsertRowid });
 });
 

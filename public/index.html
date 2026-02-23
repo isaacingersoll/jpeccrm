@@ -659,6 +659,33 @@ function EventDetail({ eventId, onBack }) {
               </table>
             </div>}
       </div>
+
+      {/* Startup Attendance */}
+      {data.startupAttendance && data.startupAttendance.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm mt-6" data-testid="section-event-startup-attendance">
+          <h2 className="font-semibold text-gray-900 px-5 py-4 border-b border-gray-100">Startup Attendance ({data.startupAttendance.length})</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase">Startup</th>
+                <th className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase">Founder</th>
+                <th className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase">Role</th>
+                <th className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase">Attended</th>
+              </tr></thead>
+              <tbody className="divide-y divide-gray-50">
+                {data.startupAttendance.map((sa, i) => (
+                  <tr key={i} className="hover:bg-gray-50/50" data-testid={`event-startup-attendance-${i}`}>
+                    <td className="px-4 py-3 font-medium text-gray-900">{sa.startup_name}</td>
+                    <td className="px-4 py-3 text-gray-600">{sa.founder_name}</td>
+                    <td className="px-4 py-3 text-gray-500">{sa.founder_role || '—'}</td>
+                    <td className="px-4 py-3">{sa.attended ? <span className="text-green-600 font-medium">Yes</span> : <span className="text-gray-400">No</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1075,6 +1102,10 @@ function StartupDetail({ startupId, onBack }) {
   };
 
   const addInteraction = async () => {
+    const contactName = (interaction.contact_name || '').trim();
+    if (contactName && data.founders && !data.founders.some(f => f.name.toLowerCase() === contactName.toLowerCase())) {
+      await api.post(`/api/startups/${startupId}/founders`, { name: contactName, email: '', phone: '', bio: '', linkedin: '', role: 'Contact' });
+    }
     await api.post(`/api/startups/${startupId}/interactions`, { ...interaction, event_id: interaction.event_id || null });
     toast('Interaction logged'); setShowAddInteraction(false); setInteraction({ contact_name:'', date:new Date().toISOString().slice(0,10), type:'Call', description:'', event_id:'' }); load();
   };
@@ -1224,7 +1255,12 @@ function StartupDetail({ startupId, onBack }) {
                   {['Call','Email','Meeting','Event Encounter','Note','Other'].map(t=><option key={t}>{t}</option>)}
                 </Select>
               </Field>
-              <Field label="Contact Name"><Input value={interaction.contact_name} onChange={e=>setInteraction(p=>({...p,contact_name:e.target.value}))} placeholder="Person at the venture" data-testid="input-interaction-contact" /></Field>
+              <Field label="Contact Name">
+                <input list="founder-names" value={interaction.contact_name} onChange={e=>setInteraction(p=>({...p,contact_name:e.target.value}))} placeholder="Select or type a name" data-testid="input-interaction-contact" className="w-full h-9 rounded-lg border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#FFCD00]" />
+                <datalist id="founder-names">
+                  {(data.founders||[]).map(f=><option key={f.id} value={f.name}>{f.name}{f.role ? ` (${f.role})` : ''}</option>)}
+                </datalist>
+              </Field>
             </div>
             <Field label="Related Event (optional)">
               <Select value={interaction.event_id} onChange={e=>setInteraction(p=>({...p,event_id:e.target.value}))} data-testid="select-interaction-event">

@@ -400,7 +400,21 @@ app.get('/api/events/:id', auth, (req, res) => {
     if (a.registered) stats.byAffiliation[a.affiliation].reg++;
     if (a.attended) stats.byAffiliation[a.affiliation].att++;
   });
-  res.json({ ...event, attendees, stats });
+  const allFounders = dbAll('SELECT f.*, s.name as startup_name, s.id as startup_id FROM founders f JOIN startups s ON s.id=f.startup_id WHERE s.active=1 AND f.email != ""');
+  const startupAttendance = [];
+  const seen = new Set();
+  attendees.forEach(a => {
+    if (!a.email) return;
+    const match = allFounders.find(f => f.email && f.email.toLowerCase() === a.email.toLowerCase());
+    if (match) {
+      const key = `${match.startup_id}-${a.id}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        startupAttendance.push({ attendee_name: a.name, attendee_email: a.email, attended: a.attended, startup_name: match.startup_name, startup_id: match.startup_id, founder_name: match.name, founder_role: match.role });
+      }
+    }
+  });
+  res.json({ ...event, attendees, stats, startupAttendance });
 });
 
 app.put('/api/events/:id', auth, (req, res) => {
